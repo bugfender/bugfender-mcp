@@ -1,0 +1,60 @@
+{
+  "name": "@bugfender/mcp",
+  "version": "0.1.0",
+  "description": "Bugfender MCP server",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@10.6.2",
+  "homepage": "https://github.com/bugfender/bugfender-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bugfender/bugfender-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bugfender/bugfender-mcp/issues"
+  },
+  "keywords": [
+    "bugfender",
+    "mcp",
+    "model-context-protocol",
+    "observability",
+    "logs",
+    "crash-reporting"
+  ],
+  "bin": {
+    "bugfender-mcp": "dist/index.js",
+    "mcp-bugfender": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "prepublishOnly": "pnpm check && pnpm build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
