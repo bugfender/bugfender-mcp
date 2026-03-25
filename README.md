@@ -1,6 +1,6 @@
 # `@bugfender/mcp`
 
-Bugfender MCP server for local stdio clients such as Cursor and Claude Code.
+Bugfender MCP server for local stdio clients such as Cursor, Claude Code, Codex, and Gemini CLI.
 
 ## What It Provides
 
@@ -19,8 +19,10 @@ Bugfender MCP server for local stdio clients such as Cursor and Claude Code.
 ## Install
 
 ```bash
-npx @bugfender/mcp
+npx -y @bugfender/mcp
 ```
+
+After adding or updating the MCP server in your IDE or agent, restart that client so it reloads the new MCP configuration cleanly.
 
 If you are running from inside this repository checkout, do not use `npx @bugfender/mcp` or `npx -p @bugfender/mcp bugfender-mcp`. npm can resolve the current package instead of the published tarball and fail with `bugfender-mcp: not found`.
 
@@ -50,7 +52,9 @@ pnpm start
 
 When a refresh token is provided, the MCP stores rotated credentials in `~/.bugfender/mcp.json` so automatic refresh survives restarts. Updating the IDE config with a newly generated refresh token resets that local state.
 
-## Cursor
+If you are using local or self-hosted Bugfender credentials, `BUGFENDER_API_URL` must point to the matching backend. For example, local credentials generated from `https://dashboard:3000` will not work against `https://dashboard.bugfender.com/api`.
+
+## Cursor / Claude Code
 
 ```json
 {
@@ -68,23 +72,44 @@ When a refresh token is provided, the MCP stores rotated credentials in `~/.bugf
 }
 ```
 
-## Claude Code
+## Codex CLI
 
-```json
-{
-  "mcpServers": {
-    "bugfender": {
-      "command": "npx",
-      "args": ["-y", "@bugfender/mcp"],
-      "env": {
-        "BUGFENDER_API_TOKEN": "YOUR_ACCESS_TOKEN",
-        "BUGFENDER_REFRESH_TOKEN": "YOUR_REFRESH_TOKEN",
-        "BUGFENDER_API_URL": "https://dashboard.bugfender.com/api"
-      }
-    }
-  }
-}
+```bash
+codex mcp add bugfender \
+  --env BUGFENDER_API_TOKEN='YOUR_ACCESS_TOKEN' \
+  --env BUGFENDER_REFRESH_TOKEN='YOUR_REFRESH_TOKEN' \
+  --env BUGFENDER_API_URL='https://dashboard.bugfender.com/api' \
+  -- npx -y @bugfender/mcp
 ```
+
+After running `codex mcp add`, restart the Codex session before testing `who_am_i` or `list_apps`.
+
+## Gemini CLI
+
+```bash
+gemini mcp add bugfender npx -y @bugfender/mcp \
+  --env BUGFENDER_API_TOKEN='YOUR_ACCESS_TOKEN' \
+  --env BUGFENDER_REFRESH_TOKEN='YOUR_REFRESH_TOKEN' \
+  --env BUGFENDER_API_URL='https://dashboard.bugfender.com/api'
+```
+
+After running `gemini mcp add`, start a new Gemini CLI session or reload MCP servers before testing `who_am_i` or `list_apps`.
+
+## Codex App
+
+In the custom MCP server form:
+
+- `Name`: `bugfender`
+- `Command to launch`: `npx`
+- `Argument 1`: `-y`
+- `Argument 2`: `@bugfender/mcp`
+- `BUGFENDER_API_TOKEN`: `YOUR_ACCESS_TOKEN`
+- `BUGFENDER_REFRESH_TOKEN`: `YOUR_REFRESH_TOKEN`
+- `BUGFENDER_API_URL`: `https://dashboard.bugfender.com/api`
+
+Add the arguments as separate rows, not as one combined string.
+
+After saving the server, restart the app before testing `who_am_i` or `list_apps`.
 
 ## Tools
 
