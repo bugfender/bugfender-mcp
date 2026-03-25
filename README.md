@@ -22,6 +22,15 @@ Bugfender MCP server for local stdio clients such as Cursor and Claude Code.
 npx @bugfender/mcp
 ```
 
+If you are running from inside this repository checkout, do not use `npx @bugfender/mcp` or `npx -p @bugfender/mcp bugfender-mcp`. npm can resolve the current package instead of the published tarball and fail with `bugfender-mcp: not found`.
+
+For local development, build and run the generated entrypoint directly:
+
+```bash
+pnpm build
+pnpm start
+```
+
 ## Configuration
 
 - `BUGFENDER_API_TOKEN`: required access token

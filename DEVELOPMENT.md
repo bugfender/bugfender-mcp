@@ -14,6 +14,15 @@ Build output is generated in `dist/`.
 
 Build the server, then point your MCP client at the local `dist/index.js` entrypoint instead of the published npm package.
 
+For direct local execution from this repository:
+
+```bash
+pnpm build
+pnpm start
+```
+
+Do not use `npx @bugfender/mcp` or `npx -p @bugfender/mcp bugfender-mcp` from inside this checkout. npm can resolve the current package and fail to expose the published bin shim, which surfaces as `bugfender-mcp: not found`.
+
 Set credentials in your shell or client config:
 
 ```bash
