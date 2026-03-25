@@ -9,8 +9,7 @@ Bugfender MCP server for local stdio clients such as Cursor and Claude Code.
 - logs, devices, app metadata, crash aggregation, and issue aggregation tools
 - SDK snippet retrieval for app onboarding
 - resource templates for snippets, logs, and issue groups
-- a companion Bugfender investigation skill in `skills/bugfender/`
-- a dedicated SDK onboarding skill in `skills/bugfender-sdk-setup/`
+- companion Bugfender skills distributed from `bugfender/bugfender-skills`
 
 ## Maintainers
 
@@ -109,9 +108,9 @@ When a refresh token is provided, the MCP stores rotated credentials in `~/.bugf
 - `bugfender://app/{app_id}/logs?...`
 - `bugfender://issue/{issue_id}?app_id={app_id}`
 
-## Companion Skill
+## Companion Skills
 
-The repo also ships a skill at `skills/bugfender/`. It encodes the investigation workflow on top of the MCP tools:
+The companion skills now live in the separate [`bugfender/bugfender-skills`](https://github.com/bugfender/bugfender-skills) repository. They encode opinionated workflows on top of the MCP tools:
 
 - use aggregation before logs
 - narrow time ranges early
@@ -129,14 +128,13 @@ Use the skill when you want Cursor, Codex, or Claude Code to do things like:
 - compare impact before and after an app version
 - identify likely cause, scope, and next checks
 
-The skill source lives in:
+The investigation skill source lives in:
 
-- `skills/bugfender/SKILL.md`
-- `skills/bugfender/agents/openai.yaml`
+- `https://github.com/bugfender/bugfender-skills/tree/main/skills/bugfender`
 
 ## SDK Setup Skill
 
-The repo also ships a dedicated onboarding skill at `skills/bugfender-sdk-setup/`.
+The dedicated onboarding skill also lives in [`bugfender/bugfender-skills`](https://github.com/bugfender/bugfender-skills).
 
 Use it when you want Cursor, Codex, or Claude Code to:
 
@@ -167,8 +165,7 @@ It also includes platform-specific references for:
 
 The skill source lives in:
 
-- `skills/bugfender-sdk-setup/SKILL.md`
-- `skills/bugfender-sdk-setup/agents/openai.yaml`
+- `https://github.com/bugfender/bugfender-skills/tree/main/skills/bugfender-sdk-setup`
 
 ## Install Skills In Cursor, Codex, Or Claude Code
 
@@ -177,7 +174,7 @@ Cursor, Codex, and Claude Code can install the skills directly from GitHub witho
 In the agent chat inside your IDE, run this prompt with the built-in installer skill:
 
 ```text
-Use $skill-installer to install these skills from https://github.com/bugfender/bugfender-mcp:
+Use $skill-installer to install these skills from https://github.com/bugfender/bugfender-skills:
 - skills/bugfender
 - skills/bugfender-sdk-setup
 ```

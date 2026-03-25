@@ -2,23 +2,34 @@
 
 ## npm Release
 
-1. Update the version in `package.json`.
-2. Verify the package locally:
+1. Install dependencies:
 
 ```bash
 pnpm install
-pnpm check
-pnpm build
-pnpm pack --pack-destination /tmp
 ```
 
-3. Publish to npm:
+2. Run the release flow:
 
 ```bash
-pnpm publish
+pnpm release
 ```
 
-`prepublishOnly` already enforces `pnpm check && pnpm build`.
+`release-it` will:
+
+- prompt for the new version
+- update `package.json`
+- create the release commit and git tag
+- publish to npm
+
+Before the release starts, the `before:init` hook runs:
+
+```bash
+pnpm release:check
+```
+
+`release:check` runs `pnpm check`, `pnpm build`, and `pnpm pack --pack-destination /tmp`.
+
+`prepublishOnly` still enforces `pnpm check && pnpm build` as a final guard during npm publish.
 
 ## MCP Registry Release
 

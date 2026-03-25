@@ -41,6 +41,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
+    "release:check": "pnpm check && pnpm build && pnpm pack --pack-destination /tmp",
+    "release": "release-it",
     "prepublishOnly": "pnpm check && pnpm build"
   },
   "publishConfig": {
@@ -52,7 +54,21 @@
   },
   "devDependencies": {
     "@types/node": "^24.6.0",
+    "release-it": "^19.2.3",
     "typescript": "^5.9.3"
+  },
+  "release-it": {
+    "$schema": "https://unpkg.com/release-it/schema/release-it.json",
+    "git": {
+      "commitMessage": "chore: release v${version}",
+      "tagName": "v${version}"
+    },
+    "npm": {
+      "publish": true
+    },
+    "hooks": {
+      "before:init": "pnpm release:check"
+    }
   },
   "engines": {
     "node": ">=20"

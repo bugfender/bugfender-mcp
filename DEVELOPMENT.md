@@ -10,12 +10,49 @@ pnpm build
 
 Build output is generated in `dist/`.
 
+## Local MCP Testing
+
+Build the server, then point your MCP client at the local `dist/index.js` entrypoint instead of the published npm package.
+
+Set credentials in your shell or client config:
+
+```bash
+export BUGFENDER_API_TOKEN="YOUR_ACCESS_TOKEN"
+export BUGFENDER_REFRESH_TOKEN="YOUR_REFRESH_TOKEN"
+export BUGFENDER_API_URL="https://dashboard.bugfender.com/api"
+```
+
+Example local MCP config:
+
+```json
+{
+  "mcpServers": {
+    "bugfender": {
+      "command": "node",
+      "args": ["/absolute/path/to/bugfender-mcp/dist/index.js"],
+      "env": {
+        "BUGFENDER_API_TOKEN": "YOUR_ACCESS_TOKEN",
+        "BUGFENDER_REFRESH_TOKEN": "YOUR_REFRESH_TOKEN",
+        "BUGFENDER_API_URL": "https://dashboard.bugfender.com/api"
+      }
+    }
+  }
+}
+```
+
+After restarting the client, smoke test with simple tool calls such as `who_am_i`, `list_teams`, or `list_apps`.
+
+Notes:
+
+- rerun `pnpm build` after code changes
+- restart the MCP client or reconnect after rebuilding
+- `~/.bugfender/mcp.json` is also supported for local token storage and rotated credentials
+
 ## Repository Layout
 
 ```text
 src/                  MCP server source
 dist/                 generated build output
-skills/bugfender/     companion investigation skill
 README.md             public package docs
 DEVELOPMENT.md        maintainer development notes
 RELEASING.md          release and publish workflow
@@ -25,6 +62,7 @@ LICENSE               Apache-2.0 license
 ## Development Notes
 
 - `src/` is the source of truth.
+- companion skills are maintained in `bugfender/bugfender-skills`.
 - `dist/` is generated and should not be committed.
 - `node_modules/` should not be committed.
 - `pnpm-lock.yaml` is the maintainer lockfile.
@@ -35,7 +73,6 @@ LICENSE               Apache-2.0 license
 Keep:
 
 - `src/`
-- `skills/bugfender/`
 - `package.json`
 - `pnpm-lock.yaml`
 - `tsconfig.json`
@@ -59,4 +96,10 @@ Useful checks before opening a PR:
 pnpm check
 pnpm build
 pnpm pack --pack-destination /tmp
+```
+
+For release verification, use:
+
+```bash
+pnpm release:check
 ```
