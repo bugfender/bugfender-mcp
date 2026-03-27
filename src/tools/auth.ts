@@ -1,22 +1,16 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { asToolResult, ok, toolError } from "../envelope.js";
+import { handleTool, ok } from "../envelope.js";
 import type { ServerContext } from "../server-context.js";
 
 export function registerAuthTools(server: McpServer, context: ServerContext): void {
-  server.tool("who_am_i", {}, async () => {
-    try {
-      return asToolResult(ok(await context.client.get("/me")));
-    } catch (error) {
-      return asToolResult(toolError(error, context.client.hasToken));
-    }
-  });
+  server.tool("who_am_i", {}, () =>
+    handleTool(context, async () => ok(await context.client.get("/me"))),
+  );
 
-  server.tool("list_teams", {}, async () => {
-    try {
+  server.tool("list_teams", {}, () =>
+    handleTool(context, async () => {
       const me = await context.client.get<{ teams?: unknown[] }>("/me");
-      return asToolResult(ok(me.teams ?? []));
-    } catch (error) {
-      return asToolResult(toolError(error, context.client.hasToken));
-    }
-  });
+      return ok(me.teams ?? []);
+    }),
+  );
 }

@@ -1,5 +1,6 @@
 import { MAX_RESPONSE_BYTES } from "./constants.js";
 import { BugfenderApiError } from "./errors.js";
+import type { ServerContext } from "./server-context.js";
 import type { Envelope, Warning } from "./types.js";
 
 export function ok(data: unknown, pagination?: Record<string, unknown>, warnings?: Warning[]): Envelope {
@@ -68,6 +69,14 @@ export function serializeEnvelope(envelope: Envelope): Envelope {
     pagination: envelope.pagination,
     warnings: [...(envelope.warnings ?? []), { code: "truncated", message: "Response exceeded 512 KB and was truncated." }],
   };
+}
+
+export async function handleTool(context: ServerContext, fn: () => Promise<Envelope>) {
+  try {
+    return asToolResult(await fn());
+  } catch (error) {
+    return asToolResult(toolError(error, context.client.hasToken));
+  }
 }
 
 export function asToolResult(envelope: Envelope) {

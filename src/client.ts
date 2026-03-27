@@ -1,7 +1,8 @@
 import { saveConfig } from "./config.js";
 import { BugfenderApiError } from "./errors.js";
 import type { RuntimeConfig } from "./types.js";
-import { paramsToSearch, withJitter } from "./utils/http.js";
+import { REQUEST_TIMEOUT_MS } from "./constants.js";
+import { paramsToSearch, parseRetryAfter, withJitter } from "./utils/http.js";
 import { tryParseJson } from "./utils/json.js";
 
 export class BugfenderClient {
@@ -47,7 +48,7 @@ export class BugfenderClient {
     }
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const response = await fetch(`${this.apiUrl}${path}`, { ...init, headers: this.buildHeaders(init) });
+      const response = await fetch(`${this.apiUrl}${path}`, { ...init, headers: this.buildHeaders(init), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       const text = await response.text();
       const body = text ? tryParseJson(text) : null;
 
@@ -69,7 +70,7 @@ export class BugfenderClient {
       const retryable = response.status === 429 || response.status >= 500;
       if (retryable && attempt < 2) {
         const retryAfter = response.headers.get("Retry-After");
-        const delay = retryAfter ? Number(retryAfter) * 1000 : withJitter(attempt === 0 ? 500 : 1500);
+        const delay = parseRetryAfter(retryAfter) ?? withJitter(attempt === 0 ? 500 : 1500);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
@@ -105,6 +106,7 @@ export class BugfenderClient {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ refresh_token: this.refreshToken }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
 
       const text = await response.text();
@@ -125,7 +127,8 @@ export class BugfenderClient {
       }
       this.persistTokens();
       return true;
-    } catch {
+    } catch (error) {
+      console.error("Bugfender token refresh failed:", error);
       return false;
     }
   }
