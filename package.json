@@ -41,6 +41,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "test": "vitest run",
     "check": "tsc --noEmit -p tsconfig.json",
     "release:check": "pnpm check && pnpm build && pnpm pack --pack-destination /tmp",
     "release": "release-it",
@@ -56,7 +57,8 @@
   "devDependencies": {
     "@types/node": "^24.6.0",
     "release-it": "^19.2.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.2"
   },
   "release-it": {
     "$schema": "https://unpkg.com/release-it/schema/release-it.json",
