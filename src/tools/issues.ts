@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { asToolResult, ok, toolError } from "../envelope.js";
+import { handleTool, ok } from "../envelope.js";
 import type { ServerContext } from "../server-context.js";
 import { normalizeEndDate, normalizeStartDate } from "../utils/date.js";
 import { clampPageSize } from "../utils/pagination.js";
@@ -53,7 +53,7 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
   server.tool(
     "list_issues",
     {
-      app_id: z.string(),
+      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
       type: z.string().optional(),
       issue_status: z.string().optional(),
       date_range_start: z.string().optional(),
@@ -64,8 +64,8 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
       page_size: z.number().int().positive().optional(),
       page: z.number().int().positive().optional(),
     },
-    async (args) => {
-      try {
+    (args) =>
+      handleTool(context, async () => {
         const result = await context.client.get<{
           data?: unknown[];
           out_of_retention_period?: boolean;
@@ -79,58 +79,48 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
           };
         }>(`/app/${args.app_id}/issues-aggregation/summary`, buildIssuesAggregationQuery(args));
 
-        return asToolResult(
-          ok(result.data ?? [], {
-            out_of_retention_period: result.out_of_retention_period,
-            current_page: result.pagination?.current_page,
-            page_size: result.pagination?.page_size,
-            total_pages: result.pagination?.total_pages,
-            total_items: result.pagination?.total_items,
-            has_next_page: result.pagination?.has_next_page,
-            has_prev_page: result.pagination?.has_prev_page,
-          }),
-        );
-      } catch (error) {
-        return asToolResult(toolError(error, context.client.hasToken));
-      }
-    },
+        return ok(result.data ?? [], {
+          out_of_retention_period: result.out_of_retention_period,
+          current_page: result.pagination?.current_page,
+          page_size: result.pagination?.page_size,
+          total_pages: result.pagination?.total_pages,
+          total_items: result.pagination?.total_items,
+          has_next_page: result.pagination?.has_next_page,
+          has_prev_page: result.pagination?.has_prev_page,
+        });
+      }),
   );
 
   server.tool(
     "get_issue",
     {
-      app_id: z.string(),
+      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
       issue_id: z.string(),
       date_range_start: z.string().optional(),
       date_range_end: z.string().optional(),
     },
-    async ({ app_id, issue_id, date_range_start, date_range_end }) => {
-      try {
-        return asToolResult(
-          ok(
-            await context.client.get(`/app/${app_id}/issues-aggregation/${issue_id}`, {
-              date_range_start: normalizeStartDate(date_range_start),
-              date_range_end: normalizeEndDate(date_range_end),
-            }),
-          ),
-        );
-      } catch (error) {
-        return asToolResult(toolError(error, context.client.hasToken));
-      }
-    },
+    ({ app_id, issue_id, date_range_start, date_range_end }) =>
+      handleTool(context, async () =>
+        ok(
+          await context.client.get(`/app/${app_id}/issues-aggregation/${issue_id}`, {
+            date_range_start: normalizeStartDate(date_range_start),
+            date_range_end: normalizeEndDate(date_range_end),
+          }),
+        ),
+      ),
   );
 
   server.tool(
     "get_feedback",
     {
-      app_id: z.string(),
+      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
       date_range_start: z.string().optional(),
       date_range_end: z.string().optional(),
       page_size: z.number().int().positive().optional(),
       page: z.number().int().positive().optional(),
     },
-    async ({ app_id, date_range_start, date_range_end, page_size, page }) => {
-      try {
+    ({ app_id, date_range_start, date_range_end, page_size, page }) =>
+      handleTool(context, async () => {
         const result = await context.client.get<{
           data?: unknown[];
           out_of_retention_period?: boolean;
@@ -150,27 +140,22 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
           page,
         });
 
-        return asToolResult(
-          ok(result.data ?? [], {
-            out_of_retention_period: result.out_of_retention_period,
-            current_page: result.pagination?.current_page,
-            page_size: result.pagination?.page_size,
-            total_pages: result.pagination?.total_pages,
-            total_items: result.pagination?.total_items,
-            has_next_page: result.pagination?.has_next_page,
-            has_prev_page: result.pagination?.has_prev_page,
-          }),
-        );
-      } catch (error) {
-        return asToolResult(toolError(error, context.client.hasToken));
-      }
-    },
+        return ok(result.data ?? [], {
+          out_of_retention_period: result.out_of_retention_period,
+          current_page: result.pagination?.current_page,
+          page_size: result.pagination?.page_size,
+          total_pages: result.pagination?.total_pages,
+          total_items: result.pagination?.total_items,
+          has_next_page: result.pagination?.has_next_page,
+          has_prev_page: result.pagination?.has_prev_page,
+        });
+      }),
   );
 
   server.tool(
     "get_issue_stats",
     {
-      app_id: z.string(),
+      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
       date_range_start: z.string(),
       date_range_end: z.string(),
       type: z.string().optional(),
@@ -180,27 +165,22 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
       version: z.number().int().optional(),
       hash: z.string().optional(),
     },
-    async (args) => {
-      try {
+    (args) =>
+      handleTool(context, async () => {
         const { app_id, hash, ...filters } = args;
-        return asToolResult(
-          ok(
-            await context.client.get(`/app/${app_id}/issues-aggregation/stats`, {
-              ...buildIssuesAggregationQuery(filters),
-              hash,
-            }),
-          ),
+        return ok(
+          await context.client.get(`/app/${app_id}/issues-aggregation/stats`, {
+            ...buildIssuesAggregationQuery(filters),
+            hash,
+          }),
         );
-      } catch (error) {
-        return asToolResult(toolError(error, context.client.hasToken));
-      }
-    },
+      }),
   );
 
   server.tool(
     "get_issue_device_stats",
     {
-      app_id: z.string(),
+      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
       date_range_start: z.string(),
       date_range_end: z.string(),
       type: z.string().optional(),
@@ -210,27 +190,22 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
       version: z.number().int().optional(),
       hash: z.string().optional(),
     },
-    async (args) => {
-      try {
+    (args) =>
+      handleTool(context, async () => {
         const { app_id, hash, ...filters } = args;
-        return asToolResult(
-          ok(
-            await context.client.get(`/app/${app_id}/issues-aggregation/device-stats`, {
-              ...buildIssuesAggregationQuery(filters),
-              hash,
-            }),
-          ),
+        return ok(
+          await context.client.get(`/app/${app_id}/issues-aggregation/device-stats`, {
+            ...buildIssuesAggregationQuery(filters),
+            hash,
+          }),
         );
-      } catch (error) {
-        return asToolResult(toolError(error, context.client.hasToken));
-      }
-    },
+      }),
   );
 
   server.tool(
     "get_issue_devices",
     {
-      app_id: z.string(),
+      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
       hash: z.string(),
       date_range_start: z.string().optional(),
       date_range_end: z.string().optional(),
@@ -243,21 +218,16 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
       page_size: z.number().int().positive().optional(),
       page: z.number().int().positive().optional(),
     },
-    async ({ app_id, hash, date_range_start, date_range_end, page_size, ...filters }) => {
-      try {
-        return asToolResult(
-          ok(
-            await context.client.get(`/app/${app_id}/issues-aggregation/${hash}/devices`, {
-              ...filters,
-              date_range_start: normalizeStartDate(date_range_start),
-              date_range_end: normalizeEndDate(date_range_end),
-              page_size: clampPageSize(page_size),
-            }),
-          ),
-        );
-      } catch (error) {
-        return asToolResult(toolError(error, context.client.hasToken));
-      }
-    },
+    ({ app_id, hash, date_range_start, date_range_end, page_size, ...filters }) =>
+      handleTool(context, async () =>
+        ok(
+          await context.client.get(`/app/${app_id}/issues-aggregation/${hash}/devices`, {
+            ...filters,
+            date_range_start: normalizeStartDate(date_range_start),
+            date_range_end: normalizeEndDate(date_range_end),
+            page_size: clampPageSize(page_size),
+          }),
+        ),
+      ),
   );
 }
