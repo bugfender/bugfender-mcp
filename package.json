@@ -1,5 +1,6 @@
 {
   "name": "@bugfender/mcp",
+  "mcpName": "io.github.bugfender/mcp",
   "version": "0.2.0",
   "description": "Bugfender MCP server",
   "license": "Apache-2.0",
@@ -70,7 +71,8 @@
       "publish": true
     },
     "hooks": {
-      "before:init": "pnpm release:check"
+      "before:init": "pnpm release:check",
+      "after:bump": "node scripts/sync-server-json-version.mjs"
     }
   },
   "engines": {
