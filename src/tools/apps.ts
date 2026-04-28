@@ -34,7 +34,7 @@ export function registerAppTools(server: McpServer, context: ServerContext): voi
     "get_app_summary",
     {
       app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      date_range_start: z.string().optional(),
+      date_range_start: z.string().optional().describe("The date to summarize, as YYYY-MM-DD or ISO 8601. Returns stats for that single day only — not a range. Defaults to yesterday."),
     },
     ({ app_id, date_range_start }) =>
       handleTool(context, async () => {
