@@ -6,12 +6,14 @@ import { registerCrashTools } from "./crashes.js";
 import { registerDeviceTools } from "./devices.js";
 import { registerIssueTools } from "./issues.js";
 import { registerLogTools } from "./logs.js";
+import { registerNetworkTools } from "./network.js";
 
 export function registerTools(server: McpServer, context: ServerContext): void {
   registerAuthTools(server, context);
   registerAppTools(server, context);
   registerCrashTools(server, context);
   registerLogTools(server, context);
+  registerNetworkTools(server, context);
   registerDeviceTools(server, context);
   registerIssueTools(server, context);
 }

@@ -126,6 +126,8 @@ After saving the server, restart the app before testing `who_am_i` or `list_apps
 - `search_logs`
 - `count_logs`
 - `count_devices_with_logs`
+- `get_network_aggregates`
+- `get_network_details`
 - `search_devices`
 - `count_devices`
 - `list_issues`
