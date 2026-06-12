@@ -42,6 +42,17 @@ export class BugfenderClient {
     );
   }
 
+  async put<T>(path: string, body?: unknown, requireAuth = true): Promise<T> {
+    return this.request<T>(
+      path,
+      {
+        method: "PUT",
+        body: body ? JSON.stringify(body) : undefined,
+      },
+      requireAuth,
+    );
+  }
+
   private async request<T>(path: string, init: RequestInit, requireAuth: boolean): Promise<T> {
     if (requireAuth && !this.apiToken && !this.refreshToken) {
       throw new BugfenderApiError("Missing Bugfender token", 401, null);

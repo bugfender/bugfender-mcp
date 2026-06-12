@@ -12,6 +12,30 @@ const issueTypeByName: Record<string, string> = {
   "user feedback": "2",
 };
 
+const issueStatusByName: Record<string, number> = {
+  new: 0,
+  open: 1,
+  in_progress: 2,
+  resolved: 3,
+  closed: 4,
+  muted: 5,
+  invalid: 6,
+};
+
+function normalizeIssueStatus(value: string): number {
+  const trimmed = value.trim().toLowerCase();
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+
+  const status = issueStatusByName[trimmed];
+  if (status === undefined) {
+    throw new Error(`Invalid issue status: ${value}. Use one of: ${Object.keys(issueStatusByName).join(", ")}`);
+  }
+
+  return status;
+}
+
 function normalizeIssueType(value?: string): string | undefined {
   if (!value) {
     return undefined;
@@ -109,6 +133,25 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
           }),
         ),
       ),
+  );
+
+  server.tool(
+    "update_issue_status",
+    "Updates the status of an issue group (issues aggregation). Use this to mark issues as resolved, closed, in progress, etc.",
+    {
+      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
+      issue_id: z.string().describe("The issue group hash from list_issues or get_issue"),
+      status: z
+        .string()
+        .describe("New status: new, open, in_progress, resolved, closed, muted, or invalid"),
+    },
+    ({ app_id, issue_id, status }) =>
+      handleTool(context, async () => {
+        await context.client.put(`/app/${app_id}/issues-aggregation/${issue_id}`, {
+          status: normalizeIssueStatus(status),
+        });
+        return ok({ app_id, issue_id, status: status.trim().toLowerCase() });
+      }),
   );
 
   server.tool(
