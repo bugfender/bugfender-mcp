@@ -132,6 +132,7 @@ After saving the server, restart the app before testing `who_am_i` or `list_apps
 - `count_devices`
 - `list_issues`
 - `get_issue`
+- `update_issue_status`
 - `get_issue_stats`
 - `get_issue_device_stats`
 - `get_issue_devices`

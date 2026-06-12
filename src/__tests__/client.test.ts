@@ -55,6 +55,16 @@ describe("BugfenderClient", () => {
       expect(init.method).toBe("POST");
       expect(init.body).toBe(JSON.stringify({ key: "value" }));
     });
+
+    it("makes PUT requests with JSON body", async () => {
+      fetchSpy.mockResolvedValueOnce(jsonResponse({ ok: true }));
+      const client = makeClient();
+      await client.put("/app/app-1/issues-aggregation/hash-1", { status: 3 });
+      const [url, init] = fetchSpy.mock.calls[0];
+      expect(url).toBe("https://api.test/app/app-1/issues-aggregation/hash-1");
+      expect(init.method).toBe("PUT");
+      expect(init.body).toBe(JSON.stringify({ status: 3 }));
+    });
   });
 
   describe("buildHeaders", () => {
