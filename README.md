@@ -1,6 +1,7 @@
 # `@bugfender/mcp`
 
-Bugfender MCP server for local stdio clients such as Cursor, Claude Code, Codex, and Gemini CLI.
+Bugfender MCP server for local stdio clients such as Cursor, Claude Code, Codex,
+and Gemini CLI, plus a stateless Streamable HTTP entry point for Bugfender's hosted service.
 
 ## What It Provides
 
@@ -51,6 +52,10 @@ pnpm start
 ```
 
 When a refresh token is provided, the MCP stores rotated credentials in `~/.bugfender/mcp.json` so automatic refresh survives restarts. Updating the IDE config with a newly generated refresh token resets that local state.
+
+These credentials and the local token store apply only to the stdio executable.
+The hosted HTTP executable reads a bearer token from each request and never
+reads or writes `~/.bugfender/mcp.json`.
 
 If you are using local or self-hosted Bugfender credentials, `BUGFENDER_API_URL` must point to the matching backend. For example, local credentials generated from `https://dashboard:3000` will not work against `https://dashboard.bugfender.com/api`.
 
@@ -110,6 +115,40 @@ In the custom MCP server form:
 Add the arguments as separate rows, not as one combined string.
 
 After saving the server, restart the app before testing `who_am_i` or `list_apps`.
+
+## Hosted Streamable HTTP
+
+Build and start the HTTP entry point with:
+
+```bash
+pnpm build
+pnpm start:http
+```
+
+It exposes:
+
+- `POST /mcp`: stateless MCP Streamable HTTP endpoint
+- `GET /healthz`: liveness check
+- `GET /readyz`: readiness check
+
+TLS is terminated by the production ingress. Every `/mcp` request must include
+`Authorization: Bearer <token>`. The process creates an isolated MCP server and
+Bugfender API client for that request; the token is neither shared nor persisted.
+
+Hosted configuration:
+
+- `BUGFENDER_API_URL` (default `https://dashboard.bugfender.com/api`)
+- `BUGFENDER_MCP_HOST` (default `0.0.0.0`)
+- `BUGFENDER_MCP_PORT` (default `3002`)
+- `BUGFENDER_MCP_MAX_REQUEST_BYTES` (default `1048576`)
+- `BUGFENDER_MCP_MAX_RESPONSE_BYTES` (default `524288`)
+- `BUGFENDER_MCP_MAX_CONCURRENCY` (default `100`)
+- `BUGFENDER_MCP_REQUEST_TIMEOUT_MS` (default `35000`)
+- `BUGFENDER_MCP_SHUTDOWN_TIMEOUT_MS` (default `10000`)
+
+The hosted entry point uses JSON response mode within the Streamable HTTP
+protocol. It is intentionally stateless, so `GET` and `DELETE` on `/mcp` return
+`405 Method Not Allowed`.
 
 ## Tools
 
