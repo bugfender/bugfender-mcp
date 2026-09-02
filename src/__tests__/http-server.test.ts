@@ -51,6 +51,10 @@ describe("hosted HTTP server", () => {
     expect(await health.json()).toEqual({ status: "ok" });
     expect(readiness.status).toBe(200);
     expect(await readiness.json()).toEqual({ status: "ready" });
+
+    const metrics = await fetch(`${baseUrl}/metrics`);
+    expect(metrics.status).toBe(200);
+    expect(await metrics.text()).toContain("bugfender_mcp_http_requests_total");
   });
 
   it("requires a bearer token on the MCP endpoint", async () => {

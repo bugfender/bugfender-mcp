@@ -150,6 +150,17 @@ The hosted entry point uses JSON response mode within the Streamable HTTP
 protocol. It is intentionally stateless, so `GET` and `DELETE` on `/mcp` return
 `405 Method Not Allowed`.
 
+The production container can be built and exercised locally with:
+
+```bash
+docker build -t bugfender-mcp .
+docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+  -p 3002:3002 bugfender-mcp
+```
+
+The image runs as UID/GID `10001`, writes structured JSON logs to stderr, and
+exposes Prometheus metrics on `GET /metrics` for cluster-internal scraping.
+
 ## Tools
 
 - `who_am_i`

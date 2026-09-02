@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { DEFAULT_API_URL, MAX_RESPONSE_BYTES } from "./constants.js";
@@ -37,6 +38,51 @@ class HttpRequestError extends Error {
 
 class RequestTimeoutError extends Error {}
 class ResponseTooLargeError extends Error {}
+
+type HttpMetrics = {
+  active: number;
+  durationSeconds: number;
+  requests: Map<string, number>;
+};
+
+function structuredLog(level: "info" | "error", event: string, fields: Record<string, unknown> = {}): void {
+  console.error(JSON.stringify({ timestamp: new Date().toISOString(), level, event, ...fields }));
+}
+
+function recordRequest(metrics: HttpMetrics, method: string, path: string, status: number, durationMs: number): void {
+  const key = `${method}\u0000${path}\u0000${status}`;
+  metrics.requests.set(key, (metrics.requests.get(key) || 0) + 1);
+  metrics.durationSeconds += durationMs / 1000;
+}
+
+function prometheusMetrics(metrics: HttpMetrics): string {
+  const lines = [
+    "# HELP bugfender_mcp_http_requests_total HTTP requests handled by the hosted MCP service.",
+    "# TYPE bugfender_mcp_http_requests_total counter",
+  ];
+  for (const [key, value] of [...metrics.requests.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const [method, path, status] = key.split("\u0000");
+    lines.push(
+      `bugfender_mcp_http_requests_total{method="${method}",path="${path}",status="${status}"} ${value}`,
+    );
+  }
+  lines.push(
+    "# HELP bugfender_mcp_http_requests_active HTTP requests currently being handled.",
+    "# TYPE bugfender_mcp_http_requests_active gauge",
+    `bugfender_mcp_http_requests_active ${metrics.active}`,
+    "# HELP bugfender_mcp_http_request_duration_seconds_sum Total time spent handling HTTP requests.",
+    "# TYPE bugfender_mcp_http_request_duration_seconds_sum counter",
+    `bugfender_mcp_http_request_duration_seconds_sum ${metrics.durationSeconds}`,
+    "# HELP bugfender_mcp_http_request_duration_seconds_count Number of timed HTTP requests.",
+    "# TYPE bugfender_mcp_http_request_duration_seconds_count counter",
+    `bugfender_mcp_http_request_duration_seconds_count ${[...metrics.requests.values()].reduce((sum, value) => sum + value, 0)}`,
+    "# HELP bugfender_mcp_build_info Build information for the hosted MCP service.",
+    "# TYPE bugfender_mcp_build_info gauge",
+    "bugfender_mcp_build_info 1",
+    "",
+  );
+  return lines.join("\n");
+}
 
 function positiveInteger(value: string | undefined, fallback: number, name: string): number {
   if (value === undefined) {
@@ -181,6 +227,19 @@ function sendJson(res: ServerResponse, status: number, body: unknown, headers?: 
   res.end(encoded);
 }
 
+function sendText(res: ServerResponse, status: number, body: string, contentType: string): void {
+  if (res.headersSent || res.destroyed) {
+    return;
+  }
+  const encoded = Buffer.from(body);
+  res.writeHead(status, {
+    "Cache-Control": "no-store",
+    "Content-Length": encoded.byteLength,
+    "Content-Type": contentType,
+  });
+  res.end(encoded);
+}
+
 function sendMcpError(res: ServerResponse, status: number, message: string, headers?: Record<string, string>): void {
   sendJson(
     res,
@@ -224,19 +283,44 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
   let activeCount = 0;
   let shutdownPromise: Promise<void> | undefined;
   const activeRequests = new Set<ActiveRequest>();
+  const metrics: HttpMetrics = { active: 0, durationSeconds: 0, requests: new Map() };
 
   const server = createServer(async (req, res) => {
+    const requestId = randomUUID();
+    const startedAt = performance.now();
+    const method = req.method || "UNKNOWN";
+    // Route and label by pathname only. Query strings may contain sensitive values
+    // and would otherwise create unbounded Prometheus label cardinality.
+    const path = new URL(req.url || "/", "http://localhost").pathname;
+    metrics.active += 1;
     res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Request-ID", requestId);
+    res.once("finish", () => {
+      const durationMs = performance.now() - startedAt;
+      metrics.active -= 1;
+      recordRequest(metrics, method, path, res.statusCode, durationMs);
+      structuredLog("info", "http_request", {
+        request_id: requestId,
+        method,
+        path,
+        status: res.statusCode,
+        duration_ms: Math.round(durationMs),
+      });
+    });
 
-    if (req.url === "/healthz") {
+    if (path === "/healthz") {
       sendJson(res, 200, { status: "ok" });
       return;
     }
-    if (req.url === "/readyz") {
+    if (path === "/readyz") {
       sendJson(res, ready ? 200 : 503, { status: ready ? "ready" : "shutting_down" });
       return;
     }
-    if (req.url !== "/mcp") {
+    if (path === "/metrics") {
+      sendText(res, 200, prometheusMetrics(metrics), "text/plain; version=0.0.4; charset=utf-8");
+      return;
+    }
+    if (path !== "/mcp") {
       sendJson(res, 404, { error: "Not found" });
       return;
     }
@@ -311,7 +395,10 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
       } else if (error instanceof ResponseTooLargeError) {
         sendMcpError(res, 502, "Response body too large");
       } else {
-        console.error("Hosted MCP request failed", error);
+        structuredLog("error", "http_request_failed", {
+          request_id: requestId,
+          error: error instanceof Error ? error.message : "unknown error",
+        });
         sendMcpError(res, 500, "Internal server error");
       }
     } finally {
