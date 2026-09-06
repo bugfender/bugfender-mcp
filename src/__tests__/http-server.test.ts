@@ -21,6 +21,11 @@ function options(overrides: Partial<HostedHttpOptions> = {}): HostedHttpOptions 
     maxConcurrency: 10,
     requestTimeoutMs: 2_000,
     shutdownTimeoutMs: 500,
+    resourceUrl: "https://mcp.test",
+    authorizationServerUrl: "https://dashboard.test",
+    resourceDocumentationUrl: "https://docs.test/mcp",
+    resourcePolicyUrl: "https://www.test/privacy",
+    resourceTermsUrl: "https://www.test/terms",
     ...overrides,
   };
 }
@@ -66,7 +71,44 @@ describe("hosted HTTP server", () => {
     });
 
     expect(response.status).toBe(401);
-    expect(response.headers.get("www-authenticate")).toBe("Bearer");
+    expect(response.headers.get("www-authenticate")).toBe(
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource"',
+    );
+  });
+
+  it("publishes OAuth protected-resource metadata", async () => {
+    const baseUrl = await start();
+    const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      resource: "https://mcp.test",
+      resource_name: "Bugfender MCP",
+      authorization_servers: ["https://dashboard.test"],
+      scopes_supported: ["mcp:read", "mcp:issues:write"],
+      bearer_methods_supported: ["header"],
+      resource_documentation: "https://docs.test/mcp",
+      resource_policy_uri: "https://www.test/privacy",
+      resource_tos_uri: "https://www.test/terms",
+    });
+  });
+
+  it("rejects malformed authorization with an invalid-token challenge", async () => {
+    const baseUrl = await start();
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        Authorization: "Basic invalid",
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toBe(
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", error="invalid_token"',
+    );
   });
 
   it("handles MCP initialize over stateless Streamable HTTP", async () => {
@@ -203,6 +245,7 @@ describe("hosted configuration", () => {
 
   it("loads limits from environment and rejects invalid values", () => {
     expect(loadHostedHttpOptions({}).port).toBe(3002);
+    expect(loadHostedHttpOptions({}).resourceUrl).toBe("https://mcp.bugfender.com");
     const loaded = loadHostedHttpOptions({
       BUGFENDER_MCP_PORT: "4000",
       BUGFENDER_MCP_MAX_CONCURRENCY: "7",
@@ -212,5 +255,9 @@ describe("hosted configuration", () => {
     expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_PORT: "nope" })).toThrow(
       "BUGFENDER_MCP_PORT must be a positive integer",
     );
+    expect(loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test/" }).resourceUrl)
+      .toBe("https://mcp.test");
+    expect(() => loadHostedHttpOptions({ BUGFENDER_OAUTH_ISSUER: "http://dashboard.test" }))
+      .toThrow("BUGFENDER_OAUTH_ISSUER must be an HTTPS origin");
   });
 });

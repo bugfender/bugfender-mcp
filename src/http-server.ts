@@ -11,6 +11,13 @@ const DEFAULT_MAX_REQUEST_BYTES = 1024 * 1024;
 const DEFAULT_MAX_CONCURRENCY = 100;
 const DEFAULT_REQUEST_TIMEOUT_MS = 35_000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
+const DEFAULT_RESOURCE_URL = "https://mcp.bugfender.com";
+const DEFAULT_AUTHORIZATION_SERVER_URL = "https://dashboard.bugfender.com";
+const DEFAULT_RESOURCE_DOCUMENTATION_URL = "https://docs.bugfender.com/docs/mcp/overview";
+const DEFAULT_RESOURCE_POLICY_URL = "https://bugfender.com/privacy-policy/";
+const DEFAULT_RESOURCE_TERMS_URL = "https://bugfender.com/terms-of-service/";
+const PROTECTED_RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
+const MCP_SCOPES = ["mcp:read", "mcp:issues:write"] as const;
 
 export type HostedHttpOptions = {
   apiUrl: string;
@@ -21,6 +28,11 @@ export type HostedHttpOptions = {
   maxConcurrency: number;
   requestTimeoutMs: number;
   shutdownTimeoutMs: number;
+  resourceUrl: string;
+  authorizationServerUrl: string;
+  resourceDocumentationUrl: string;
+  resourcePolicyUrl: string;
+  resourceTermsUrl: string;
 };
 
 type ActiveRequest = {
@@ -95,6 +107,26 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
   return parsed;
 }
 
+function httpsOrigin(value: string, name: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid URL`);
+  }
+  if (
+    parsed.protocol !== "https:"
+    || parsed.username !== ""
+    || parsed.password !== ""
+    || parsed.pathname !== "/"
+    || parsed.search !== ""
+    || parsed.hash !== ""
+  ) {
+    throw new Error(`${name} must be an HTTPS origin without credentials, path, query, or fragment`);
+  }
+  return parsed.origin;
+}
+
 export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): HostedHttpOptions {
   return {
     apiUrl: env.BUGFENDER_API_URL || DEFAULT_API_URL,
@@ -125,6 +157,43 @@ export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): Hos
       DEFAULT_SHUTDOWN_TIMEOUT_MS,
       "BUGFENDER_MCP_SHUTDOWN_TIMEOUT_MS",
     ),
+    resourceUrl: httpsOrigin(
+      env.BUGFENDER_MCP_RESOURCE_URL || DEFAULT_RESOURCE_URL,
+      "BUGFENDER_MCP_RESOURCE_URL",
+    ),
+    authorizationServerUrl: httpsOrigin(
+      env.BUGFENDER_OAUTH_ISSUER || DEFAULT_AUTHORIZATION_SERVER_URL,
+      "BUGFENDER_OAUTH_ISSUER",
+    ),
+    resourceDocumentationUrl:
+      env.BUGFENDER_MCP_DOCUMENTATION_URL || DEFAULT_RESOURCE_DOCUMENTATION_URL,
+    resourcePolicyUrl: env.BUGFENDER_MCP_PRIVACY_POLICY_URL || DEFAULT_RESOURCE_POLICY_URL,
+    resourceTermsUrl: env.BUGFENDER_MCP_TERMS_URL || DEFAULT_RESOURCE_TERMS_URL,
+  };
+}
+
+function protectedResourceMetadataUrl(options: HostedHttpOptions): string {
+  return new URL(PROTECTED_RESOURCE_METADATA_PATH, `${options.resourceUrl}/`).toString();
+}
+
+function bearerChallenge(options: HostedHttpOptions, invalidToken = false): string {
+  const parameters = [`resource_metadata="${protectedResourceMetadataUrl(options)}"`];
+  if (invalidToken) {
+    parameters.push('error="invalid_token"');
+  }
+  return `Bearer ${parameters.join(", ")}`;
+}
+
+function protectedResourceMetadata(options: HostedHttpOptions): Record<string, unknown> {
+  return {
+    resource: options.resourceUrl,
+    resource_name: "Bugfender MCP",
+    authorization_servers: [options.authorizationServerUrl],
+    scopes_supported: [...MCP_SCOPES],
+    bearer_methods_supported: ["header"],
+    resource_documentation: options.resourceDocumentationUrl,
+    resource_policy_uri: options.resourcePolicyUrl,
+    resource_tos_uri: options.resourceTermsUrl,
   };
 }
 
@@ -320,6 +389,14 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
       sendText(res, 200, prometheusMetrics(metrics), "text/plain; version=0.0.4; charset=utf-8");
       return;
     }
+    if (path === PROTECTED_RESOURCE_METADATA_PATH) {
+      if (req.method !== "GET") {
+        sendJson(res, 405, { error: "Method not allowed" }, { Allow: "GET" });
+        return;
+      }
+      sendJson(res, 200, protectedResourceMetadata(options));
+      return;
+    }
     if (path !== "/mcp") {
       sendJson(res, 404, { error: "Not found" });
       return;
@@ -385,7 +462,9 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
         if (!req.complete) {
           req.resume();
         }
-        const headers = error.status === 401 ? { "WWW-Authenticate": "Bearer" } : undefined;
+        const headers = error.status === 401
+          ? { "WWW-Authenticate": bearerChallenge(options, error.message === "Invalid bearer token") }
+          : undefined;
         sendMcpError(res, error.status, error.message, headers);
       } else if (error instanceof RequestTimeoutError) {
         if (!req.complete) {

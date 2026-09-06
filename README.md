@@ -161,6 +161,15 @@ docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
 The image runs as UID/GID `10001`, writes structured JSON logs to stderr, and
 exposes Prometheus metrics on `GET /metrics` for cluster-internal scraping.
 
+Hosted mode publishes OAuth protected-resource metadata at
+`GET /.well-known/oauth-protected-resource`. Authentication challenges point
+clients to that document. Production defaults to resource
+`https://mcp.bugfender.com` and issuer `https://dashboard.bugfender.com`;
+staging deployments must override `BUGFENDER_MCP_RESOURCE_URL` and
+`BUGFENDER_OAUTH_ISSUER` with their staging origins. Documentation, privacy,
+and terms links can be overridden with `BUGFENDER_MCP_DOCUMENTATION_URL`,
+`BUGFENDER_MCP_PRIVACY_POLICY_URL`, and `BUGFENDER_MCP_TERMS_URL`.
+
 ## Tools
 
 - `who_am_i`
