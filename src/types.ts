@@ -37,4 +37,7 @@ export type RuntimeConfig = {
   configPath: string;
   seedRefreshToken?: string;
   persistRuntimeTokens: boolean;
+  hostedOAuth?: {
+    protectedResourceMetadataUrl: string;
+  };
 };

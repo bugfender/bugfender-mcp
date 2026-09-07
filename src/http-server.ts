@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { DEFAULT_API_URL, MAX_RESPONSE_BYTES } from "./constants.js";
 import { createBugfenderServer } from "./server.js";
+import { MCP_READ_SCOPE, oauthChallenge } from "./oauth.js";
 import type { RuntimeConfig } from "./types.js";
 
 const DEFAULT_HOST = "0.0.0.0";
@@ -177,11 +178,11 @@ function protectedResourceMetadataUrl(options: HostedHttpOptions): string {
 }
 
 function bearerChallenge(options: HostedHttpOptions, invalidToken = false): string {
-  const parameters = [`resource_metadata="${protectedResourceMetadataUrl(options)}"`];
-  if (invalidToken) {
-    parameters.push('error="invalid_token"');
-  }
-  return `Bearer ${parameters.join(", ")}`;
+  return oauthChallenge(
+    protectedResourceMetadataUrl(options),
+    [MCP_READ_SCOPE],
+    invalidToken ? "invalid_token" : undefined,
+  );
 }
 
 function protectedResourceMetadata(options: HostedHttpOptions): Record<string, unknown> {
@@ -309,21 +310,40 @@ function sendText(res: ServerResponse, status: number, body: string, contentType
   res.end(encoded);
 }
 
-function sendMcpError(res: ServerResponse, status: number, message: string, headers?: Record<string, string>): void {
+function sendMcpError(
+  res: ServerResponse,
+  status: number,
+  message: string,
+  headers?: Record<string, string>,
+  authenticationChallenge?: string,
+): void {
   sendJson(
     res,
     status,
-    { jsonrpc: "2.0", error: { code: -32000, message }, id: null },
+    {
+      jsonrpc: "2.0",
+      error: {
+        code: authenticationChallenge ? -32001 : -32000,
+        message,
+        ...(authenticationChallenge
+          ? { data: { _meta: { "mcp/www_authenticate": authenticationChallenge } } }
+          : {}),
+      },
+      id: null,
+    },
     headers,
   );
 }
 
-export function createHostedRuntimeConfig(token: string, apiUrl: string): RuntimeConfig {
+export function createHostedRuntimeConfig(token: string, apiUrl: string, resourceUrl: string): RuntimeConfig {
   return {
     apiToken: token,
     apiUrl,
     configPath: "",
     persistRuntimeTokens: false,
+    hostedOAuth: {
+      protectedResourceMetadataUrl: new URL(PROTECTED_RESOURCE_METADATA_PATH, `${resourceUrl}/`).toString(),
+    },
   };
 }
 
@@ -435,7 +455,7 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
         }
 
         const { server: mcpServer } = createBugfenderServer(
-          createHostedRuntimeConfig(token, options.apiUrl),
+          createHostedRuntimeConfig(token, options.apiUrl, options.resourceUrl),
         );
         const transport = new WebStandardStreamableHTTPServerTransport({
           enableJsonResponse: true,
@@ -462,10 +482,19 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
         if (!req.complete) {
           req.resume();
         }
-        const headers = error.status === 401
-          ? { "WWW-Authenticate": bearerChallenge(options, error.message === "Invalid bearer token") }
+        const challenge = error.status === 401
+          ? bearerChallenge(options, error.message === "Invalid bearer token")
           : undefined;
-        sendMcpError(res, error.status, error.message, headers);
+        const headers = challenge
+          ? { "WWW-Authenticate": challenge }
+          : undefined;
+        sendMcpError(
+          res,
+          error.status,
+          error.status === 401 ? "Authentication required" : error.message,
+          headers,
+          challenge,
+        );
       } else if (error instanceof RequestTimeoutError) {
         if (!req.complete) {
           req.resume();

@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { handleTool, ok } from "../envelope.js";
+import { MCP_ISSUES_WRITE_SCOPE } from "../oauth.js";
 import type { ServerContext } from "../server-context.js";
 import { normalizeEndDate, normalizeStartDate } from "../utils/date.js";
 import { clampPageSize } from "../utils/pagination.js";
@@ -151,7 +152,7 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
           status: normalizeIssueStatus(status),
         });
         return ok({ app_id, issue_id, status: status.trim().toLowerCase() });
-      }),
+      }, [MCP_ISSUES_WRITE_SCOPE]),
   );
 
   server.tool(

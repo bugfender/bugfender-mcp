@@ -1,6 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { request } from "node:http";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createHostedHttpServer,
   createHostedRuntimeConfig,
@@ -42,6 +42,7 @@ async function start(overrides: Partial<HostedHttpOptions> = {}): Promise<string
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.allSettled(servers.splice(0).map((hosted) => hosted.shutdown()));
 });
 
@@ -72,7 +73,11 @@ describe("hosted HTTP server", () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get("www-authenticate")).toBe(
-      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource"',
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", scope="mcp:read"',
+    );
+    const body = await response.json() as { error?: { data?: { _meta?: Record<string, string> } } };
+    expect(body.error?.data?._meta?.["mcp/www_authenticate"]).toBe(
+      response.headers.get("www-authenticate"),
     );
   });
 
@@ -107,7 +112,7 @@ describe("hosted HTTP server", () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get("www-authenticate")).toBe(
-      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", error="invalid_token"',
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", scope="mcp:read", error="invalid_token"',
     );
   });
 
@@ -136,6 +141,72 @@ describe("hosted HTTP server", () => {
     expect(response.headers.get("mcp-session-id")).toBeNull();
     const body = await response.json() as { result?: { serverInfo?: { name?: string } } };
     expect(body.result?.serverInfo?.name).toBe("bugfender");
+  });
+
+  it("declares exact OAuth scopes for protected tools", async () => {
+    const baseUrl = await start();
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json, text/event-stream",
+        Authorization: "Bearer request-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      result?: { tools?: Array<{ name: string; _meta?: Record<string, unknown> }> };
+    };
+    const tools = body.result?.tools ?? [];
+    const readTool = tools.find((tool) => tool.name === "list_apps");
+    const writeTool = tools.find((tool) => tool.name === "update_issue_status");
+    expect(readTool?._meta?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:read"] }]);
+    expect(writeTool?._meta?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:issues:write"] }]);
+  });
+
+  it("returns an MCP OAuth challenge when the API rejects a hosted token", async () => {
+    const realFetch = globalThis.fetch.bind(globalThis);
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+      if (url.startsWith("https://api.test")) {
+        return Promise.resolve(new Response(
+          JSON.stringify({ message: "internal authentication detail" }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        ));
+      }
+      return realFetch(input, init);
+    });
+    const baseUrl = await start();
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json, text/event-stream",
+        Authorization: "Bearer expired-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: { name: "who_am_i", arguments: {} },
+      }),
+    });
+
+    const body = await response.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }>; _meta?: Record<string, string> };
+    };
+    expect(body.result?.isError).toBe(true);
+    expect(body.result?._meta?.["mcp/www_authenticate"]).toBe(
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", scope="mcp:read", error="invalid_token"',
+    );
+    expect(JSON.stringify(body)).not.toContain("internal authentication detail");
+    expect(JSON.stringify(body)).not.toContain("expired-token");
   });
 
   it("rejects oversized requests before MCP handling", async () => {
@@ -232,8 +303,8 @@ describe("hosted HTTP server", () => {
 
 describe("hosted configuration", () => {
   it("creates isolated non-persisting runtime configuration", () => {
-    const first = createHostedRuntimeConfig("first-token", "https://api.test/");
-    const second = createHostedRuntimeConfig("second-token", "https://api.test/");
+    const first = createHostedRuntimeConfig("first-token", "https://api.test/", "https://mcp.test");
+    const second = createHostedRuntimeConfig("second-token", "https://api.test/", "https://mcp.test");
 
     expect(first).not.toBe(second);
     expect(first.apiToken).toBe("first-token");
@@ -241,6 +312,8 @@ describe("hosted configuration", () => {
     expect(first.refreshToken).toBeUndefined();
     expect(first.persistRuntimeTokens).toBe(false);
     expect(first.configPath).toBe("");
+    expect(first.hostedOAuth?.protectedResourceMetadataUrl)
+      .toBe("https://mcp.test/.well-known/oauth-protected-resource");
   });
 
   it("loads limits from environment and rejects invalid values", () => {
