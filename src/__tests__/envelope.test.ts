@@ -59,6 +59,14 @@ describe("toolError", () => {
     expect(result.error.message).toBe("Bad input");
   });
 
+  it("lists accepted order values when the API returns Invalid order", () => {
+    const err = new BugfenderApiError("fail", 400, { message: "Invalid order" });
+    const result = toolError(err, true) as ErrorEnvelope;
+    expect(result.error.message).toContain("Invalid order");
+    expect(result.error.message).toContain("last_active");
+    expect(result.error.hint).toContain("seen");
+  });
+
   it("handles non-BugfenderApiError Error instances", () => {
     const err = new Error("something broke");
     const result = toolError(err, true) as ErrorEnvelope;

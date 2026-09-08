@@ -1,5 +1,6 @@
 import { MAX_RESPONSE_BYTES } from "./constants.js";
 import { BugfenderApiError } from "./errors.js";
+import { enrichApiErrorMessage, INVALID_ORDER_HINT } from "./utils/devices-query.js";
 import type { ServerContext } from "./server-context.js";
 import type { Envelope, Warning } from "./types.js";
 
@@ -21,14 +22,17 @@ export function toolError(error: unknown, hasToken: boolean): Envelope {
   if (error instanceof BugfenderApiError) {
     const body = typeof error.body === "object" && error.body ? (error.body as Record<string, unknown>) : null;
     const errorCode = body && "code" in body ? String(body.code) : undefined;
-    const message =
+    const rawMessage =
       body && "message" in body
         ? String(body.message)
         : error.message;
+    const message = enrichApiErrorMessage(rawMessage);
     const hint =
       errorCode === "refresh_expired"
         ? "Your Bugfender MCP session can no longer refresh automatically. Open Bugfender MCP Setup, generate a fresh config, and replace both BUGFENDER_API_TOKEN and BUGFENDER_REFRESH_TOKEN in your IDE."
-        : authHint(hasToken, error.status);
+        : /invalid order/i.test(rawMessage)
+          ? INVALID_ORDER_HINT
+          : authHint(hasToken, error.status);
 
     return {
       ok: false,
