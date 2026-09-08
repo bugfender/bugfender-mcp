@@ -1,8 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { handleTool, ok } from "../envelope.js";
-import { MCP_ISSUES_WRITE_SCOPE } from "../oauth.js";
+import { MCP_ISSUES_WRITE_SCOPE, oauthSecurityMetadata } from "../oauth.js";
 import type { ServerContext } from "../server-context.js";
+import { readOnlyOAuthMetadata, readOnlyToolAnnotations, toolEnvelopeSchema } from "../tool-metadata.js";
 import { normalizeEndDate, normalizeStartDate } from "../utils/date.js";
 import { clampPageSize } from "../utils/pagination.js";
 
@@ -75,20 +76,26 @@ function buildIssuesAggregationQuery(args: {
 }
 
 export function registerIssueTools(server: McpServer, context: ServerContext): void {
-  server.tool(
+  server.registerTool(
     "list_issues",
-    "Lists issue groups for an app. Supports filtering by type (issue, crash, feedback) and status (open, resolved, closed). Use this instead of get_crashes or get_feedback when you need status filtering or combined results.",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      type: z.string().optional().describe("Filter by type: issue, crash, feedback"),
-      issue_status: z.string().optional().describe("Filter by status: new, open, in_progress, resolved, closed, muted"),
-      date_range_start: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T00:00:00Z)"),
-      date_range_end: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T23:59:59Z)"),
-      query: z.string().optional().describe("Filter by issue title text."),
-      content: z.string().optional().describe("Filter by issue body/content text."),
-      version: z.number().int().optional().describe("Filter by app version ID."),
-      page_size: z.number().int().positive().optional(),
-      page: z.number().int().positive().optional(),
+      title: "List Issue Groups",
+      description: "Lists issue, crash, or feedback groups for an app with status, date, content, and version filters.",
+      inputSchema: {
+        app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
+        type: z.string().optional().describe("Filter by type: issue, crash, feedback"),
+        issue_status: z.string().optional().describe("Filter by status: new, open, in_progress, resolved, closed, muted"),
+        date_range_start: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T00:00:00Z)"),
+        date_range_end: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T23:59:59Z)"),
+        query: z.string().optional().describe("Filter by issue title text."),
+        content: z.string().optional().describe("Filter by issue body/content text."),
+        version: z.number().int().optional().describe("Filter by app version ID."),
+        page_size: z.number().int().positive().optional().describe("Number of issue groups per page, capped by the server maximum."),
+        page: z.number().int().positive().optional().describe("One-based result page to return."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     (args) =>
       handleTool(context, async () => {
@@ -117,13 +124,20 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
       }),
   );
 
-  server.tool(
+  server.registerTool(
     "get_issue",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      issue_id: z.string(),
-      date_range_start: z.string().optional(),
-      date_range_end: z.string().optional(),
+      title: "Get Issue Details",
+      description: "Returns full details for one issue group within an optional date range.",
+      inputSchema: {
+        app_id: z.string().describe("Public app ID returned by list_apps."),
+        issue_id: z.string().describe("Issue group hash returned by list_issues."),
+        date_range_start: z.string().optional().describe("Inclusive start as an ISO 8601 datetime."),
+        date_range_end: z.string().optional().describe("Inclusive end as an ISO 8601 datetime."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     ({ app_id, issue_id, date_range_start, date_range_end }) =>
       handleTool(context, async () =>
@@ -136,15 +150,24 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
       ),
   );
 
-  server.tool(
+  server.registerTool(
     "update_issue_status",
-    "Updates the status of an issue group (issues aggregation). Use this to mark issues as resolved, closed, in progress, etc.",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      issue_id: z.string().describe("The issue group hash from list_issues or get_issue"),
-      status: z
-        .string()
-        .describe("New status: new, open, in_progress, resolved, closed, muted, or invalid"),
+      title: "Update Issue Status",
+      description: "Changes an issue group's status to new, open, in progress, resolved, closed, muted, or invalid.",
+      inputSchema: {
+        app_id: z.string().describe("Public app ID returned by list_apps."),
+        issue_id: z.string().describe("Issue group hash returned by list_issues or get_issue."),
+        status: z.string().describe("New status: new, open, in_progress, resolved, closed, muted, or invalid."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+      _meta: oauthSecurityMetadata([MCP_ISSUES_WRITE_SCOPE]),
     },
     ({ app_id, issue_id, status }) =>
       handleTool(context, async () => {
@@ -155,14 +178,21 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
       }, [MCP_ISSUES_WRITE_SCOPE]),
   );
 
-  server.tool(
+  server.registerTool(
     "get_feedback",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      date_range_start: z.string().optional(),
-      date_range_end: z.string().optional(),
-      page_size: z.number().int().positive().optional(),
-      page: z.number().int().positive().optional(),
+      title: "List User Feedback",
+      description: "Lists user-feedback issue groups for an app and optional date range.",
+      inputSchema: {
+        app_id: z.string().describe("Public app ID returned by list_apps."),
+        date_range_start: z.string().optional().describe("Inclusive start as an ISO 8601 datetime."),
+        date_range_end: z.string().optional().describe("Inclusive end as an ISO 8601 datetime."),
+        page_size: z.number().int().positive().optional().describe("Number of feedback groups per page, capped by the server maximum."),
+        page: z.number().int().positive().optional().describe("One-based result page to return."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     ({ app_id, date_range_start, date_range_end, page_size, page }) =>
       handleTool(context, async () => {
@@ -197,18 +227,25 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
       }),
   );
 
-  server.tool(
+  server.registerTool(
     "get_issue_stats",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      date_range_start: z.string().describe("ISO 8601 datetime string (e.g. 2026-04-21T00:00:00Z)"),
-      date_range_end: z.string().describe("ISO 8601 datetime string (e.g. 2026-04-28T23:59:59Z)"),
-      type: z.string().optional().describe("Filter by type: issue, crash, feedback"),
-      issue_status: z.string().optional().describe("Filter by status: new, open, in_progress, resolved, closed, muted"),
-      query: z.string().optional().describe("Filter by issue title text."),
-      content: z.string().optional().describe("Filter by issue body/content text."),
-      version: z.number().int().optional().describe("Filter by app version ID."),
-      hash: z.string().optional().describe("Filter to a specific issue hash."),
+      title: "Get Issue Statistics",
+      description: "Returns aggregate statistics for issue groups matching the supplied filters.",
+      inputSchema: {
+        app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
+        date_range_start: z.string().describe("ISO 8601 datetime string (e.g. 2026-04-21T00:00:00Z)"),
+        date_range_end: z.string().describe("ISO 8601 datetime string (e.g. 2026-04-28T23:59:59Z)"),
+        type: z.string().optional().describe("Filter by type: issue, crash, feedback"),
+        issue_status: z.string().optional().describe("Filter by status: new, open, in_progress, resolved, closed, muted"),
+        query: z.string().optional().describe("Filter by issue title text."),
+        content: z.string().optional().describe("Filter by issue body/content text."),
+        version: z.number().int().optional().describe("Filter by app version ID."),
+        hash: z.string().optional().describe("Filter to a specific issue hash."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     (args) =>
       handleTool(context, async () => {
@@ -222,18 +259,25 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
       }),
   );
 
-  server.tool(
+  server.registerTool(
     "get_issue_device_stats",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      date_range_start: z.string().describe("ISO 8601 datetime string (e.g. 2026-04-21T00:00:00Z)"),
-      date_range_end: z.string().describe("ISO 8601 datetime string (e.g. 2026-04-28T23:59:59Z)"),
-      type: z.string().optional().describe("Filter by type: issue, crash, feedback"),
-      issue_status: z.string().optional().describe("Filter by status: new, open, in_progress, resolved, closed, muted"),
-      query: z.string().optional().describe("Filter by issue title text."),
-      content: z.string().optional().describe("Filter by issue body/content text."),
-      version: z.number().int().optional().describe("Filter by app version ID."),
-      hash: z.string().optional().describe("Filter to a specific issue hash."),
+      title: "Get Issue Device Statistics",
+      description: "Returns device-model and operating-system statistics for matching issue groups.",
+      inputSchema: {
+        app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
+        date_range_start: z.string().describe("ISO 8601 datetime string (e.g. 2026-04-21T00:00:00Z)"),
+        date_range_end: z.string().describe("ISO 8601 datetime string (e.g. 2026-04-28T23:59:59Z)"),
+        type: z.string().optional().describe("Filter by type: issue, crash, feedback"),
+        issue_status: z.string().optional().describe("Filter by status: new, open, in_progress, resolved, closed, muted"),
+        query: z.string().optional().describe("Filter by issue title text."),
+        content: z.string().optional().describe("Filter by issue body/content text."),
+        version: z.number().int().optional().describe("Filter by app version ID."),
+        hash: z.string().optional().describe("Filter to a specific issue hash."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     (args) =>
       handleTool(context, async () => {
@@ -247,21 +291,28 @@ export function registerIssueTools(server: McpServer, context: ServerContext): v
       }),
   );
 
-  server.tool(
+  server.registerTool(
     "get_issue_devices",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      hash: z.string(),
-      date_range_start: z.string().optional(),
-      date_range_end: z.string().optional(),
-      device_model: z.string().optional(),
-      device_udid: z.string().optional(),
-      os_version: z.string().optional(),
-      device_name: z.string().optional(),
-      app_version: z.string().optional(),
-      order: z.string().optional(),
-      page_size: z.number().int().positive().optional(),
-      page: z.number().int().positive().optional(),
+      title: "List Devices Affected by an Issue",
+      description: "Lists devices affected by one issue group with date, device, OS, version, sorting, and pagination filters.",
+      inputSchema: {
+        app_id: z.string().describe("Public app ID returned by list_apps."),
+        hash: z.string().describe("Issue group hash returned by list_issues or get_issue."),
+        date_range_start: z.string().optional().describe("Inclusive start as an ISO 8601 datetime."),
+        date_range_end: z.string().optional().describe("Inclusive end as an ISO 8601 datetime."),
+        device_model: z.string().optional().describe("Filter by device model."),
+        device_udid: z.string().optional().describe("Filter by device UDID returned by search_devices."),
+        os_version: z.string().optional().describe("Filter by operating-system version."),
+        device_name: z.string().optional().describe("Filter by device name."),
+        app_version: z.string().optional().describe("Filter by app version."),
+        order: z.string().optional().describe("Sort expression supported by the Bugfender API."),
+        page_size: z.number().int().positive().optional().describe("Number of devices per page, capped by the server maximum."),
+        page: z.number().int().positive().optional().describe("One-based result page to return."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     ({ app_id, hash, date_range_start, date_range_end, page_size, ...filters }) =>
       handleTool(context, async () =>

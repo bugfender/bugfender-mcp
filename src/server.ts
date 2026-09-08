@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { BugfenderClient } from "./client.js";
 import { SERVER_NAME, SERVER_VERSION } from "./constants.js";
-import { addOAuthSecurityToToolRegistrations } from "./oauth.js";
 import { registerResources } from "./resources/index.js";
 import type { ServerContext } from "./server-context.js";
 import { registerTools } from "./tools/index.js";
@@ -22,7 +21,6 @@ export function createBugfenderServer(config: RuntimeConfig): BugfenderServer {
     version: SERVER_VERSION,
   });
 
-  addOAuthSecurityToToolRegistrations(server);
   registerTools(server, context);
   registerResources(server, context);
 

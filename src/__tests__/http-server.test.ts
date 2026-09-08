@@ -143,7 +143,7 @@ describe("hosted HTTP server", () => {
     expect(body.result?.serverInfo?.name).toBe("bugfender");
   });
 
-  it("declares exact OAuth scopes for protected tools", async () => {
+  it("publishes complete review metadata for every tool", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/mcp`, {
       method: "POST",
@@ -157,13 +157,58 @@ describe("hosted HTTP server", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json() as {
-      result?: { tools?: Array<{ name: string; _meta?: Record<string, unknown> }> };
+      result?: {
+        tools?: Array<{
+          name: string;
+          title?: string;
+          description?: string;
+          inputSchema?: { properties?: Record<string, { description?: string }> };
+          outputSchema?: {
+            properties?: Record<string, unknown>;
+            anyOf?: Array<{ properties?: Record<string, unknown> }>;
+          };
+          annotations?: {
+            readOnlyHint?: boolean;
+            openWorldHint?: boolean;
+            destructiveHint?: boolean;
+          };
+          _meta?: Record<string, unknown>;
+        }>;
+      };
     };
     const tools = body.result?.tools ?? [];
-    const readTool = tools.find((tool) => tool.name === "list_apps");
-    const writeTool = tools.find((tool) => tool.name === "update_issue_status");
-    expect(readTool?._meta?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:read"] }]);
-    expect(writeTool?._meta?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:issues:write"] }]);
+    expect(tools.length).toBeGreaterThan(0);
+
+    for (const tool of tools) {
+      expect(tool.name).toMatch(/^[a-z][a-z0-9_]*$/);
+      expect(tool.title?.trim()).toBeTruthy();
+      expect(tool.description?.trim()).toBeTruthy();
+      const outputVariants = [tool.outputSchema, ...(tool.outputSchema?.anyOf ?? [])];
+      expect(
+        outputVariants.some((schema) => schema?.properties && "ok" in schema.properties),
+        `${tool.name} must publish the normalized envelope output schema: ${JSON.stringify(tool.outputSchema)}`,
+      ).toBe(true);
+      expect(tool.annotations?.openWorldHint).toBe(true);
+      for (const [field, schema] of Object.entries(tool.inputSchema?.properties ?? {})) {
+        expect(schema.description, `${tool.name}.${field} needs a description`).toBeTruthy();
+      }
+
+      if (tool.name === "update_issue_status") {
+        expect(tool._meta?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:issues:write"] }]);
+        expect(tool.annotations).toMatchObject({
+          readOnlyHint: false,
+          openWorldHint: true,
+          destructiveHint: true,
+        });
+      } else {
+        expect(tool._meta?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:read"] }]);
+        expect(tool.annotations).toMatchObject({
+          readOnlyHint: true,
+          openWorldHint: true,
+          destructiveHint: false,
+        });
+      }
+    }
   });
 
   it("returns an MCP OAuth challenge when the API rejects a hosted token", async () => {

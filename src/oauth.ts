@@ -1,5 +1,3 @@
-import type { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
-
 export const MCP_READ_SCOPE = "mcp:read";
 export const MCP_ISSUES_WRITE_SCOPE = "mcp:issues:write";
 
@@ -22,17 +20,4 @@ export function oauthChallenge(
     parameters.push(`error="${error}"`);
   }
   return `Bearer ${parameters.join(", ")}`;
-}
-
-export function addOAuthSecurityToToolRegistrations(server: McpServer): void {
-  const registerTool = server.tool.bind(server);
-  server.tool = ((...args: unknown[]): RegisteredTool => {
-    const registered = Reflect.apply(registerTool, server, args) as RegisteredTool;
-    const toolName = args[0];
-    const scopes = toolName === "update_issue_status"
-      ? [MCP_ISSUES_WRITE_SCOPE]
-      : [MCP_READ_SCOPE];
-    registered.update({ _meta: oauthSecurityMetadata(scopes) });
-    return registered;
-  }) as typeof server.tool;
 }

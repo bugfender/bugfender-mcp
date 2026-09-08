@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { handleTool, ok } from "../envelope.js";
 import type { ServerContext } from "../server-context.js";
+import { readOnlyOAuthMetadata, readOnlyToolAnnotations, toolEnvelopeSchema } from "../tool-metadata.js";
 import { normalizeEndDate, normalizeStartDate } from "../utils/date.js";
 import { clampPageSize } from "../utils/pagination.js";
 
@@ -28,7 +29,14 @@ export function registerLogTools(
   server: McpServer,
   context: ServerContext,
 ): void {
-  server.tool("search_logs", searchLogsSchema, (args) =>
+  server.registerTool("search_logs", {
+    title: "Search Bugfender Logs",
+    description: "Searches an app's remote logs by text, device, time, severity, tags, or app version.",
+    inputSchema: searchLogsSchema,
+    outputSchema: toolEnvelopeSchema,
+    annotations: readOnlyToolAnnotations,
+    _meta: readOnlyOAuthMetadata,
+  }, (args) =>
     handleTool(context, async () => {
       const {
         app_id,
@@ -59,17 +67,24 @@ export function registerLogTools(
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "count_logs",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      text: z.string().optional().describe("Full-text search across log messages."),
-      device_udid: z.string().optional().describe("Filter to a specific device by its UDID."),
-      date_range_start: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T00:00:00Z)."),
-      date_range_end: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T23:59:59Z)."),
-      level: z.number().int().optional().describe("Filter by log level. 0=Debug, 1=Warning, 2=Error, 3=Trace, 4=Info, 5=Fatal"),
-      tags: z.array(z.string()).optional().describe("Filter by log tags (e.g. [\"ERROR\", \"NETWORK\"])."),
-      app_version: z.number().int().optional().describe("Filter by app version ID from list_app_versions."),
+      title: "Count Bugfender Logs",
+      description: "Counts an app's logs matching text, device, time, severity, tags, or app-version filters.",
+      inputSchema: {
+        app_id: z.string().describe("Public app ID returned by list_apps."),
+        text: z.string().optional().describe("Full-text search across log messages."),
+        device_udid: z.string().optional().describe("Filter to a specific device by its UDID."),
+        date_range_start: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T00:00:00Z)."),
+        date_range_end: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T23:59:59Z)."),
+        level: z.number().int().optional().describe("Filter by log level. 0=Debug, 1=Warning, 2=Error, 3=Trace, 4=Info, 5=Fatal"),
+        tags: z.array(z.string()).optional().describe("Filter by log tags (e.g. [\"ERROR\", \"NETWORK\"])."),
+        app_version: z.number().int().optional().describe("Filter by app version ID from list_app_versions."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     (args) =>
       handleTool(context, async () => {
@@ -84,15 +99,20 @@ export function registerLogTools(
       }),
   );
 
-  server.tool(
+  server.registerTool(
     "count_devices_with_logs",
     {
-      app_id: z
-        .string()
-        .describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      text: z.string(),
-      date_range_start: z.string().optional(),
-      date_range_end: z.string().optional(),
+      title: "Count Devices with Matching Logs",
+      description: "Counts distinct devices whose logs contain text during an optional date range.",
+      inputSchema: {
+        app_id: z.string().describe("Public app ID returned by list_apps."),
+        text: z.string().describe("Text that must appear in a device's logs."),
+        date_range_start: z.string().optional().describe("Inclusive start as an ISO 8601 datetime."),
+        date_range_end: z.string().optional().describe("Inclusive end as an ISO 8601 datetime."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     (args) =>
       handleTool(context, async () => {
