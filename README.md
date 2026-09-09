@@ -146,6 +146,28 @@ Hosted configuration:
 - `BUGFENDER_MCP_REQUEST_TIMEOUT_MS` (default `35000`)
 - `BUGFENDER_MCP_SHUTDOWN_TIMEOUT_MS` (default `10000`)
 
+### Staging OAuth and tool smoke test
+
+After completing the normal OAuth consent flow against staging, run the smoke
+test with the resulting short-lived access token and an app available to that
+account:
+
+```bash
+BUGFENDER_MCP_E2E_ACCESS_TOKEN='...' \
+BUGFENDER_MCP_E2E_APP_ID='...' \
+pnpm test:staging
+```
+
+Set `BUGFENDER_MCP_E2E_URL` only when testing an endpoint other than
+`https://mcp-stg.bugfender.com/mcp`. The test verifies both OAuth discovery
+documents, initializes MCP, lists tools, identifies the connected account,
+lists apps, and runs the read-only `count_logs` investigation tool. Keep the
+access token only in the shell environment; do not commit it or save it in a
+long-lived CI secret.
+
+For the native ChatGPT/Codex consent, tool-call, disconnect, and revocation
+scenario, follow [the staging OAuth end-to-end test](docs/staging-oauth-e2e.md).
+
 The hosted entry point uses JSON response mode within the Streamable HTTP
 protocol. It is intentionally stateless, so `GET` and `DELETE` on `/mcp` return
 `405 Method Not Allowed`.

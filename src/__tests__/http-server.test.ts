@@ -254,6 +254,58 @@ describe("hosted HTTP server", () => {
     expect(JSON.stringify(body)).not.toContain("expired-token");
   });
 
+  it("returns the write scope in the MCP challenge when issue access is insufficient", async () => {
+    const realFetch = globalThis.fetch.bind(globalThis);
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+      if (url.startsWith("https://api.test")) {
+        expect(init?.headers).toEqual(expect.any(Headers));
+        expect((init?.headers as Headers).get("Authorization")).toBe("Bearer read-only-token");
+        return Promise.resolve(new Response(
+          JSON.stringify({ message: "private authorization detail" }),
+          { status: 403, headers: { "Content-Type": "application/json" } },
+        ));
+      }
+      return realFetch(input, init);
+    });
+    const baseUrl = await start();
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json, text/event-stream",
+        Authorization: "Bearer read-only-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: {
+          name: "update_issue_status",
+          arguments: { app_id: "app-id", issue_id: "issue-id", status: "resolved" },
+        },
+      }),
+    });
+
+    const body = await response.json() as {
+      result?: { isError?: boolean; structuredContent?: unknown; _meta?: Record<string, string> };
+    };
+    expect(body.result?.isError).toBe(true);
+    expect(body.result?._meta?.["mcp/www_authenticate"]).toBe(
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", scope="mcp:issues:write", error="insufficient_scope"',
+    );
+    expect(body.result?.structuredContent).toEqual({
+      ok: false,
+      error: { code: "insufficient_scope", message: "Insufficient permission" },
+    });
+    expect(JSON.stringify(body)).not.toContain("private authorization detail");
+    expect(JSON.stringify(body)).not.toContain("read-only-token");
+  });
+
   it("rejects oversized requests before MCP handling", async () => {
     const baseUrl = await start({ maxRequestBytes: 32 });
     const response = await fetch(`${baseUrl}/mcp`, {

@@ -42,6 +42,7 @@ jobs:
       - run: pnpm check
       - run: pnpm test
       - run: pnpm build
+      - run: node --check scripts/staging-smoke.mjs
       - name: Build production image
         run: docker build --tag hosted-mcp:test .
       - name: Smoke-test production image
@@ -49,7 +50,7 @@ jobs:
           set -euo pipefail
           container_id="$(docker run -d --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m -p 127.0.0.1:3002:3002 hosted-mcp:test)"
           trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
-          for attempt in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:3002/readyz >/dev/null; then
               exit 0
             fi
