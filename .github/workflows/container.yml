@@ -2,7 +2,9 @@ name: Container and deploy hosted MCP
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feat/bf-codex-plugin
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -90,7 +92,7 @@ jobs:
 
   dispatch-deployment:
     if: >-
-      github.event_name == 'push' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.deploy_environment != 'none')
     needs: publish
     runs-on: ubuntu-latest
