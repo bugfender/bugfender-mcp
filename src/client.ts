@@ -59,8 +59,28 @@ export class BugfenderClient {
     }
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const response = await fetch(`${this.apiUrl}${path}`, { ...init, headers: this.buildHeaders(init), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-      const text = await response.text();
+      const requestUrl = `${this.apiUrl}${path}`;
+      let response: Response;
+      let text: string;
+      try {
+        response = await fetch(requestUrl, { ...init, headers: this.buildHeaders(init), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+        text = await response.text();
+      } catch (error) {
+        const cause = error instanceof Error && error.cause instanceof Error ? error.cause : null;
+        console.error(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: "error",
+          event: "bugfender_api_fetch_failed",
+          method: init.method,
+          url: requestUrl,
+          error_name: error instanceof Error ? error.name : "unknown",
+          error_message: error instanceof Error ? error.message : "unknown",
+          cause_name: cause?.name,
+          cause_message: cause?.message,
+          cause_code: cause && "code" in cause ? cause.code : undefined,
+        }));
+        throw error;
+      }
       const body = text ? tryParseJson(text) : null;
 
       if (response.ok) {
