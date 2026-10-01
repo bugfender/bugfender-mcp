@@ -1,0 +1,35 @@
+name: Hosted MCP staging OAuth E2E
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-mcp-staging-oauth-e2e
+  cancel-in-progress: false
+
+jobs:
+  staging-oauth-ui:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Exercise real staging OAuth UI and MCP tools
+        env:
+          BUGFENDER_MCP_E2E_EMAIL: ${{ secrets.BUGFENDER_MCP_E2E_EMAIL }}
+          BUGFENDER_MCP_E2E_PASSWORD: ${{ secrets.BUGFENDER_MCP_E2E_PASSWORD }}
+          BUGFENDER_MCP_E2E_CLIENT_ID: ${{ vars.BUGFENDER_MCP_E2E_CLIENT_ID }}
+          BUGFENDER_MCP_E2E_APP_ID: ${{ vars.BUGFENDER_MCP_E2E_APP_ID }}
+        run: pnpm test:staging-ui

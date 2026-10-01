@@ -34,6 +34,22 @@ BUGFENDER_MCP_E2E_APP_ID='...' \
 pnpm test:staging
 ```
 
+## Automated authorization-UI check
+
+The `Hosted MCP staging OAuth E2E` workflow runs daily and can also be started
+manually. Configure its `staging` GitHub environment with:
+
+- secrets `BUGFENDER_MCP_E2E_EMAIL` and `BUGFENDER_MCP_E2E_PASSWORD` for a
+  dedicated staging account without interactive 2FA;
+- variables `BUGFENDER_MCP_E2E_CLIENT_ID` and `BUGFENDER_MCP_E2E_APP_ID`.
+
+`BUGFENDER_MCP_E2E_CLIENT_ID` must be a stable public HTTPS CIMD URL whose
+document identifies itself as the client, uses `token_endpoint_auth_method`
+`none`, and includes `http://127.0.0.1:7777/callback` as its first redirect URI.
+The workflow opens the real staging login and consent UI in headless Chromium,
+performs an Authorization Code plus S256 PKCE exchange, then invokes
+`who_am_i`, `list_apps`, and `count_logs` against the configured app.
+
 The script validates both discovery documents, MCP initialization, tool
 listing, `who_am_i`, `list_apps`, and the read-only `count_logs` investigation
 tool. Never commit the token or store it as a long-lived CI secret.

@@ -372,6 +372,61 @@ describe("hosted HTTP server", () => {
     pending.destroy();
   });
 
+  it("keeps concurrent users' bearer credentials isolated", async () => {
+    const realFetch = globalThis.fetch.bind(globalThis);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+      if (!url.startsWith("https://api.test")) {
+        return realFetch(input, init);
+      }
+      const headers = new Headers(init?.headers);
+      const authorization = headers.get("Authorization");
+      await new Promise((resolve) => setTimeout(resolve, authorization === "Bearer first-user-token" ? 20 : 5));
+      return new Response(JSON.stringify({ authorization }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    const baseUrl = await start();
+    const callWhoAmI = async (id: number, token: string) => {
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json, text/event-stream",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          method: "tools/call",
+          params: { name: "who_am_i", arguments: {} },
+        }),
+      });
+      return response.json() as Promise<{
+        result?: { structuredContent?: { ok?: boolean; data?: { authorization?: string } } };
+      }>;
+    };
+
+    const [first, second] = await Promise.all([
+      callWhoAmI(1, "first-user-token"),
+      callWhoAmI(2, "second-user-token"),
+    ]);
+
+    expect(first.result?.structuredContent).toEqual({
+      ok: true,
+      data: { authorization: "Bearer first-user-token" },
+    });
+    expect(second.result?.structuredContent).toEqual({
+      ok: true,
+      data: { authorization: "Bearer second-user-token" },
+    });
+  });
+
   it("times out the complete request, including body receipt", async () => {
     const baseUrl = await start({ requestTimeoutMs: 50 });
     const status = await new Promise<number>((resolve, reject) => {
