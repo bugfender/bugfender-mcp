@@ -95,6 +95,7 @@ export class BugfenderClient {
   private buildHeaders(init: RequestInit): Headers {
     const headers = new Headers(init.headers);
     headers.set("Accept", "application/json");
+    headers.set("Accept-Encoding", "identity");
     if (init.body) {
       headers.set("Content-Type", "application/json");
     }

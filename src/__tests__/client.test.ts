@@ -75,6 +75,7 @@ describe("BugfenderClient", () => {
       const [, init] = fetchSpy.mock.calls[0];
       const headers = init.headers as Headers;
       expect(headers.get("Authorization")).toBe("Bearer my-token");
+      expect(headers.get("Accept-Encoding")).toBe("identity");
     });
 
     it("sets Content-Type for POST requests", async () => {
