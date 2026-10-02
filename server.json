@@ -2,13 +2,19 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.bugfender/mcp",
   "title": "Bugfender",
-  "description": "Access Bugfender logs, crashes, devices, and user feedback from MCP-enabled clients.",
+  "description": "Access Bugfender logs, crashes, devices, and user feedback through hosted OAuth.",
   "version": "0.6.0",
   "websiteUrl": "https://github.com/bugfender/bugfender-mcp#readme",
   "repository": {
     "url": "https://github.com/bugfender/bugfender-mcp",
     "source": "github"
   },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.bugfender.com/mcp"
+    }
+  ],
   "packages": [
     {
       "registryType": "npm",
