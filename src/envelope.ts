@@ -1,7 +1,13 @@
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { MAX_RESPONSE_BYTES } from "./constants.js";
 import { BugfenderApiError } from "./errors.js";
 import type { ServerContext } from "./server-context.js";
 import type { Envelope, Warning } from "./types.js";
+import { MCP_READ_SCOPE, oauthChallenge } from "./oauth.js";
+
+type EnvelopeToolResult = CallToolResult & {
+  structuredContent: Envelope;
+};
 
 export function ok(data: unknown, pagination?: Record<string, unknown>, warnings?: Warning[]): Envelope {
   return { ok: true, data, pagination, warnings };
@@ -71,15 +77,42 @@ export function serializeEnvelope(envelope: Envelope): Envelope {
   };
 }
 
-export async function handleTool(context: ServerContext, fn: () => Promise<Envelope>) {
+export async function handleTool(
+  context: ServerContext,
+  fn: () => Promise<Envelope>,
+  requiredScopes: readonly string[] = [MCP_READ_SCOPE],
+): Promise<EnvelopeToolResult> {
   try {
     return asToolResult(await fn());
   } catch (error) {
+    if (
+      context.config?.hostedOAuth
+      && error instanceof BugfenderApiError
+      && (error.status === 401 || error.status === 403)
+    ) {
+      const challenge = oauthChallenge(
+        context.config.hostedOAuth.protectedResourceMetadataUrl,
+        requiredScopes,
+        error.status === 401 ? "invalid_token" : "insufficient_scope",
+      );
+      const envelope: Envelope = {
+        ok: false,
+        error: {
+          code: error.status === 401 ? "unauthorized" : "insufficient_scope",
+          message: error.status === 401 ? "Authentication required" : "Insufficient permission",
+        },
+      };
+      return {
+        ...asToolResult(envelope),
+        isError: true,
+        _meta: { "mcp/www_authenticate": challenge },
+      };
+    }
     return asToolResult(toolError(error, context.client.hasToken));
   }
 }
 
-export function asToolResult(envelope: Envelope) {
+export function asToolResult(envelope: Envelope): EnvelopeToolResult {
   const serialized = serializeEnvelope(envelope);
   return {
     content: [{ type: "text" as const, text: JSON.stringify(serialized, null, 2) }],

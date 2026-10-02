@@ -2,7 +2,7 @@
   "name": "@bugfender/mcp",
   "mcpName": "io.github.bugfender/mcp",
   "version": "0.6.0",
-  "description": "Bugfender MCP server",
+  "description": "Bugfender MCP server with hosted OAuth and a deprecated local stdio fallback",
   "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@10.6.2",
@@ -24,7 +24,8 @@
   ],
   "bin": {
     "bugfender-mcp": "dist/index.js",
-    "mcp-bugfender": "dist/index.js"
+    "mcp-bugfender": "dist/index.js",
+    "bugfender-mcp-http": "dist/http.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -42,7 +43,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "start:http": "node dist/http.js",
     "test": "vitest run",
+    "test:stdio": "node scripts/stdio-smoke.mjs",
+    "test:staging": "node scripts/staging-smoke.mjs",
+    "test:staging-ui": "node scripts/staging-ui-e2e.mjs",
     "check": "tsc --noEmit -p tsconfig.json",
     "release:check": "pnpm check && pnpm build && pnpm pack --pack-destination /tmp",
     "release": "release-it",
@@ -57,6 +62,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.6.0",
+    "playwright": "^1.58.2",
     "release-it": "^19.2.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.2"

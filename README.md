@@ -1,6 +1,14 @@
-# `@bugfender/mcp`
+# Bugfender MCP
 
-Bugfender MCP server for local stdio clients such as Cursor, Claude Code, Codex, and Gemini CLI.
+Bugfender's hosted MCP service connects AI clients to Bugfender through remote
+Streamable HTTP and OAuth:
+
+```text
+https://mcp.bugfender.com/mcp
+```
+
+The `@bugfender/mcp` npm package remains available as a deprecated local stdio
+fallback for existing and self-hosted installations.
 
 ## What It Provides
 
@@ -16,11 +24,52 @@ Bugfender MCP server for local stdio clients such as Cursor, Claude Code, Codex,
 - development workflow: [DEVELOPMENT.md](./DEVELOPMENT.md)
 - release and publish flow: [RELEASING.md](./RELEASING.md)
 
-## Install
+## Recommended: hosted OAuth
+
+In ChatGPT or Codex, install the public Bugfender plugin and connect the included
+Bugfender app. In any compatible remote MCP client, add
+`https://mcp.bugfender.com/mcp` and choose OAuth authentication.
+
+The client discovers the protected resource and Bugfender authorization server,
+opens the Bugfender sign-in and consent UI, and manages short-lived access and
+refresh tokens. Hosted users must not manually copy an API token into the
+connection.
+
+### OAuth scopes
+
+- `mcp:read` grants read-only access to identity, teams, apps, SDK metadata,
+  logs, devices, crashes, issues, feedback, network data, and summaries the
+  signed-in user can already access.
+- `mcp:issues:write` grants only `update_issue_status`. It does not grant
+  general Bugfender administration or other write operations.
+
+### Disconnect and revoke
+
+Use the client's Bugfender **Disconnect** action to revoke the hosted grant and
+its access and refresh tokens. If a client lists the plugin and connection
+separately, disconnect the connection before uninstalling the plugin. A future
+tool call must start a new OAuth flow.
+
+### Privacy
+
+The hosted MCP forwards the request bearer token to the Bugfender API and
+returns data the signed-in user is authorized to access. It does not persist
+user credentials or expose them in tool results. The MCP client and AI provider
+may separately process tool inputs and return Bugfender data under their own
+privacy and retention terms. See Bugfender's
+[Privacy Policy](https://bugfender.com/privacy-policy/) and
+[Terms of Service](https://bugfender.com/terms-of-service/).
+
+## Deprecated: local stdio package
+
+Existing installations and clients without remote OAuth can continue to run:
 
 ```bash
 npx -y @bugfender/mcp
 ```
+
+Do not use this setup for a new public-cloud connection. Prefer the hosted URL
+or public plugin instead.
 
 After adding or updating the MCP server in your IDE or agent, restart that client so it reloads the new MCP configuration cleanly.
 
@@ -33,7 +82,7 @@ pnpm build
 pnpm start
 ```
 
-## Configuration
+## Local stdio configuration
 
 - `BUGFENDER_API_TOKEN`: required access token
 - `BUGFENDER_REFRESH_TOKEN`: recommended for automatic token refresh
@@ -52,9 +101,13 @@ pnpm start
 
 When a refresh token is provided, the MCP stores rotated credentials in `~/.bugfender/mcp.json` so automatic refresh survives restarts. Updating the IDE config with a newly generated refresh token resets that local state.
 
+These credentials and the local token store apply only to the stdio executable.
+The hosted HTTP executable reads a bearer token from each request and never
+reads or writes `~/.bugfender/mcp.json`.
+
 If you are using local or self-hosted Bugfender credentials, `BUGFENDER_API_URL` must point to the matching backend. For example, local credentials generated from `https://dashboard:3000` will not work against `https://dashboard.bugfender.com/api`.
 
-## Cursor / Claude Code
+### Legacy Cursor / Claude Code configuration
 
 ```json
 {
@@ -72,7 +125,7 @@ If you are using local or self-hosted Bugfender credentials, `BUGFENDER_API_URL`
 }
 ```
 
-## Codex CLI
+### Legacy Codex CLI configuration
 
 ```bash
 codex mcp add bugfender \
@@ -84,7 +137,7 @@ codex mcp add bugfender \
 
 After running `codex mcp add`, restart the Codex session before testing `who_am_i` or `list_apps`.
 
-## Gemini CLI
+### Legacy Gemini CLI configuration
 
 ```bash
 gemini mcp add bugfender npx -y @bugfender/mcp \
@@ -95,7 +148,7 @@ gemini mcp add bugfender npx -y @bugfender/mcp \
 
 After running `gemini mcp add`, start a new Gemini CLI session or reload MCP servers before testing `who_am_i` or `list_apps`.
 
-## Codex App
+### Legacy Codex App configuration
 
 In the custom MCP server form:
 
@@ -110,6 +163,97 @@ In the custom MCP server form:
 Add the arguments as separate rows, not as one combined string.
 
 After saving the server, restart the app before testing `who_am_i` or `list_apps`.
+
+## Hosted Streamable HTTP deployment
+
+Build and start the HTTP entry point with:
+
+```bash
+pnpm build
+pnpm start:http
+```
+
+It exposes:
+
+- `POST /mcp`: stateless MCP Streamable HTTP endpoint
+- `GET /healthz`: liveness check
+- `GET /readyz`: readiness check
+
+TLS is terminated by the production ingress. Every `/mcp` request must include
+`Authorization: Bearer <token>`. The process creates an isolated MCP server and
+Bugfender API client for that request; the token is neither shared nor persisted.
+
+Hosted configuration:
+
+- `BUGFENDER_API_URL` (default `https://dashboard.bugfender.com/api`)
+- `BUGFENDER_MCP_HOST` (default `0.0.0.0`)
+- `BUGFENDER_MCP_PORT` (default `3002`)
+- `BUGFENDER_MCP_MAX_REQUEST_BYTES` (default `1048576`)
+- `BUGFENDER_MCP_MAX_RESPONSE_BYTES` (default `524288`)
+- `BUGFENDER_MCP_MAX_CONCURRENCY` (default `100`)
+- `BUGFENDER_MCP_REQUEST_TIMEOUT_MS` (default `35000`)
+- `BUGFENDER_MCP_SHUTDOWN_TIMEOUT_MS` (default `10000`)
+
+### Staging OAuth and tool smoke test
+
+After completing the normal OAuth consent flow against staging, run the smoke
+test with the resulting short-lived access token and an app available to that
+account:
+
+```bash
+BUGFENDER_MCP_E2E_ACCESS_TOKEN='...' \
+BUGFENDER_MCP_E2E_APP_ID='...' \
+pnpm test:staging
+```
+
+Set `BUGFENDER_MCP_E2E_URL` only when testing an endpoint other than
+`https://mcp-stg.bugfender.com/mcp`. The test verifies both OAuth discovery
+documents, initializes MCP, lists tools, identifies the connected account,
+lists apps, and runs the read-only `count_logs` investigation tool. Keep the
+access token only in the shell environment; do not commit it or save it in a
+long-lived CI secret.
+
+For the native ChatGPT/Codex consent, tool-call, disconnect, and revocation
+scenario, follow [the staging OAuth end-to-end test](docs/staging-oauth-e2e.md).
+
+The hosted entry point uses JSON response mode within the Streamable HTTP
+protocol. It is intentionally stateless, so `GET` and `DELETE` on `/mcp` return
+`405 Method Not Allowed`.
+
+The production container can be built and exercised locally with:
+
+```bash
+docker build -t bugfender-mcp .
+docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+  -p 3002:3002 bugfender-mcp
+```
+
+The image runs as UID/GID `10001`, writes structured JSON logs to stderr, and
+exposes Prometheus metrics on `GET /metrics` for cluster-internal scraping.
+
+Hosted mode publishes OAuth protected-resource metadata at
+`GET /.well-known/oauth-protected-resource`. Authentication challenges point
+clients to that document. Production defaults to resource
+`https://mcp.bugfender.com` and issuer `https://dashboard.bugfender.com`;
+staging deployments must override `BUGFENDER_MCP_RESOURCE_URL` and
+`BUGFENDER_OAUTH_ISSUER` with their staging origins. Documentation, privacy,
+and terms links can be overridden with `BUGFENDER_MCP_DOCUMENTATION_URL`,
+`BUGFENDER_MCP_PRIVACY_POLICY_URL`, and `BUGFENDER_MCP_TERMS_URL`.
+
+### Hosted authentication troubleshooting
+
+- Use the exact endpoint `https://mcp.bugfender.com/mcp`; the OAuth resource is
+  the origin `https://mcp.bugfender.com` without `/mcp`.
+- Do not configure `BUGFENDER_API_TOKEN` or paste a bearer token into a remote-hosted connection.
+- Disconnect and reconnect to recover from expired or revoked grants or to
+  request different scopes.
+- `update_issue_status` requires `mcp:issues:write`; investigation tools require
+  `mcp:read`.
+- A client must support remote Streamable HTTP, OAuth discovery, Authorization
+  Code with PKCE, and resource indicators. Otherwise, use the deprecated local
+  stdio fallback.
+- Hosted OAuth currently supports Bugfender's public cloud. Self-hosted
+  deployments must use local stdio and set `BUGFENDER_API_URL` to their backend.
 
 ## Tools
 

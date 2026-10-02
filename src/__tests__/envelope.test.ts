@@ -114,4 +114,25 @@ describe("handleTool", () => {
     });
     expect(result.structuredContent.ok).toBe(false);
   });
+
+  it("returns OAuth linking metadata for hosted authentication errors", async () => {
+    const context = {
+      client: { hasToken: true },
+      config: {
+        hostedOAuth: {
+          protectedResourceMetadataUrl: "https://mcp.test/.well-known/oauth-protected-resource",
+        },
+      },
+    } as any;
+    const result = await handleTool(context, async () => {
+      throw new BugfenderApiError("secret internal detail", 403, { message: "secret body" });
+    }, ["mcp:issues:write"]);
+
+    expect(result.isError).toBe(true);
+    expect(result._meta?.["mcp/www_authenticate"]).toBe(
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", scope="mcp:issues:write", error="insufficient_scope"',
+    );
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(JSON.stringify(result)).not.toContain("BUGFENDER_API_TOKEN");
+  });
 });

@@ -57,6 +57,19 @@ Notes:
 - restart the MCP client or reconnect after rebuilding
 - `~/.bugfender/mcp.json` is also supported for local token storage and rotated credentials
 
+## Hosted HTTP Testing
+
+Build and run the request-scoped Streamable HTTP entry point:
+
+```bash
+pnpm build
+BUGFENDER_API_URL="https://dashboard.bugfender.com/api" pnpm start:http
+```
+
+The endpoint is `POST http://localhost:3002/mcp`; liveness and readiness are
+available at `/healthz` and `/readyz`. Unlike stdio mode, hosted mode requires a
+bearer token on every MCP request and never loads or persists local credentials.
+
 ## Repository Layout
 
 ```text
