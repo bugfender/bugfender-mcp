@@ -3,17 +3,24 @@ import { z } from "zod";
 import { MAX_PAGE_SIZE } from "../constants.js";
 import { handleTool, ok } from "../envelope.js";
 import type { ServerContext } from "../server-context.js";
+import { readOnlyOAuthMetadata, readOnlyToolAnnotations, toolEnvelopeSchema } from "../tool-metadata.js";
 import { normalizeEndDate, normalizeStartDate } from "../utils/date.js";
 
 export function registerCrashTools(server: McpServer, context: ServerContext): void {
-  server.tool(
+  server.registerTool(
     "get_crashes",
-    "Returns a list of crash groups for an app, optionally filtered by date range. Does not support filtering by status — use list_issues with type=crash and issue_status if you need open/resolved/closed crashes only.",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      limit: z.number().int().positive().optional().default(20).describe("Max number of crashes to return. Defaults to 20."),
-      date_range_start: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-21T00:00:00Z)."),
-      date_range_end: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T23:59:59Z)."),
+      title: "List Crash Groups",
+      description: "Lists crash groups for an app and date range. Use list_issues when status filtering is required.",
+      inputSchema: {
+        app_id: z.string().describe("Public app ID returned by list_apps."),
+        limit: z.number().int().positive().optional().default(20).describe("Maximum crash groups to return; defaults to 20."),
+        date_range_start: z.string().optional().describe("Inclusive start as an ISO 8601 datetime."),
+        date_range_end: z.string().optional().describe("Inclusive end as an ISO 8601 datetime."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     ({ app_id, limit = 20, date_range_start, date_range_end }) =>
       handleTool(context, async () => {
@@ -37,14 +44,21 @@ export function registerCrashTools(server: McpServer, context: ServerContext): v
       }),
   );
 
-  server.tool(
+  server.registerTool(
     "get_crash_stats",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      date_range_start: z.string(),
-      date_range_end: z.string().optional(),
-      title: z.string().optional(),
-      hash: z.string().optional(),
+      title: "Get Crash Statistics",
+      description: "Returns aggregate crash statistics for an app, date range, and optional crash filters.",
+      inputSchema: {
+        app_id: z.string().describe("Public app ID returned by list_apps."),
+        date_range_start: z.string().describe("Inclusive start as an ISO 8601 datetime."),
+        date_range_end: z.string().optional().describe("Inclusive end as an ISO 8601 datetime."),
+        title: z.string().optional().describe("Filter by crash title text."),
+        hash: z.string().optional().describe("Filter by crash group hash."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     ({ app_id, date_range_start, date_range_end, title, hash }) =>
       handleTool(context, async () =>
@@ -60,14 +74,21 @@ export function registerCrashTools(server: McpServer, context: ServerContext): v
       ),
   );
 
-  server.tool(
+  server.registerTool(
     "get_crash_device_stats",
     {
-      app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"),
-      date_range_start: z.string(),
-      date_range_end: z.string().optional(),
-      title: z.string().optional(),
-      hash: z.string().optional(),
+      title: "Get Crash Device Statistics",
+      description: "Returns device-model and operating-system statistics for matching crash groups.",
+      inputSchema: {
+        app_id: z.string().describe("Public app ID returned by list_apps."),
+        date_range_start: z.string().describe("Inclusive start as an ISO 8601 datetime."),
+        date_range_end: z.string().optional().describe("Inclusive end as an ISO 8601 datetime."),
+        title: z.string().optional().describe("Filter by crash title text."),
+        hash: z.string().optional().describe("Filter by crash group hash."),
+      },
+      outputSchema: toolEnvelopeSchema,
+      annotations: readOnlyToolAnnotations,
+      _meta: readOnlyOAuthMetadata,
     },
     ({ app_id, date_range_start, date_range_end, title, hash }) =>
       handleTool(context, async () =>
@@ -83,7 +104,17 @@ export function registerCrashTools(server: McpServer, context: ServerContext): v
       ),
   );
 
-  server.tool("get_crash_details", { app_id: z.string().describe("The public app ID (e.g. 5X3c4veRGV) from list_apps"), hash: z.string() }, ({ app_id, hash }) =>
+  server.registerTool("get_crash_details", {
+    title: "Get Crash Details",
+    description: "Returns full details and affected-device samples for a specific crash group.",
+    inputSchema: {
+      app_id: z.string().describe("Public app ID returned by list_apps."),
+      hash: z.string().describe("Crash group hash returned by get_crashes or list_issues."),
+    },
+    outputSchema: toolEnvelopeSchema,
+    annotations: readOnlyToolAnnotations,
+    _meta: readOnlyOAuthMetadata,
+  }, ({ app_id, hash }) =>
     handleTool(context, async () => {
       const [details, devices] = await Promise.all([
         context.client.get(`/app/${app_id}/issues-aggregation/${hash}`),
