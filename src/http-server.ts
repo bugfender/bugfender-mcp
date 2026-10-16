@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { DEFAULT_API_URL, MAX_RESPONSE_BYTES } from "./constants.js";
+import { MAX_RESPONSE_BYTES } from "./constants.js";
 import { createBugfenderServer } from "./server.js";
 import { MCP_READ_SCOPE, oauthChallenge } from "./oauth.js";
 import type { RuntimeConfig } from "./types.js";
@@ -12,8 +12,9 @@ const DEFAULT_MAX_REQUEST_BYTES = 1024 * 1024;
 const DEFAULT_MAX_CONCURRENCY = 100;
 const DEFAULT_REQUEST_TIMEOUT_MS = 35_000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
+const DEFAULT_HOSTED_API_URL = "https://app.bugfender.com/api";
 const DEFAULT_RESOURCE_URL = "https://mcp.bugfender.com";
-const DEFAULT_AUTHORIZATION_SERVER_URL = "https://dashboard.bugfender.com";
+const DEFAULT_AUTHORIZATION_SERVER_URL = "https://app.bugfender.com";
 const DEFAULT_RESOURCE_DOCUMENTATION_URL = "https://docs.bugfender.com/docs/mcp/overview";
 const DEFAULT_RESOURCE_POLICY_URL = "https://bugfender.com/privacy-policy/";
 const DEFAULT_RESOURCE_TERMS_URL = "https://bugfender.com/terms-of-service/";
@@ -130,7 +131,7 @@ function httpsOrigin(value: string, name: string): string {
 
 export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): HostedHttpOptions {
   return {
-    apiUrl: env.BUGFENDER_API_URL || DEFAULT_API_URL,
+    apiUrl: env.BUGFENDER_API_URL || DEFAULT_HOSTED_API_URL,
     host: env.BUGFENDER_MCP_HOST || DEFAULT_HOST,
     port: positiveInteger(env.BUGFENDER_MCP_PORT, DEFAULT_PORT, "BUGFENDER_MCP_PORT"),
     maxRequestBytes: positiveInteger(
