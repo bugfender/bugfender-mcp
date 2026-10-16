@@ -470,7 +470,9 @@ describe("hosted configuration", () => {
 
   it("loads limits from environment and rejects invalid values", () => {
     expect(loadHostedHttpOptions({}).port).toBe(3002);
+    expect(loadHostedHttpOptions({}).apiUrl).toBe("https://app.bugfender.com/api");
     expect(loadHostedHttpOptions({}).resourceUrl).toBe("https://mcp.bugfender.com");
+    expect(loadHostedHttpOptions({}).authorizationServerUrl).toBe("https://app.bugfender.com");
     const loaded = loadHostedHttpOptions({
       BUGFENDER_MCP_PORT: "4000",
       BUGFENDER_MCP_MAX_CONCURRENCY: "7",
