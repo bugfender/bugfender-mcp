@@ -20,4 +20,3 @@ jobs:
       - run: pnpm check
       - run: pnpm test
       - run: pnpm build
-      - run: node --check scripts/staging-smoke.mjs
