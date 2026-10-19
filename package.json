@@ -46,8 +46,6 @@
     "start:http": "node dist/http.js",
     "test": "vitest run",
     "test:stdio": "node scripts/stdio-smoke.mjs",
-    "test:staging": "node scripts/staging-smoke.mjs",
-    "test:staging-ui": "node scripts/staging-ui-e2e.mjs",
     "check": "tsc --noEmit -p tsconfig.json",
     "release:check": "pnpm check && pnpm build && pnpm pack --pack-destination /tmp",
     "release": "release-it",
