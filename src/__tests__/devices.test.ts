@@ -12,6 +12,7 @@ describe("device query mapping", () => {
 
   it("uses the API default ordering and parameter names", () => {
     expect(deviceQuery({
+      device_id: "device-123*",
       name: "iPhone*",
       model: "iPhone 16",
       os_name: "iOS",
@@ -22,6 +23,7 @@ describe("device query mapping", () => {
       page_size: 10,
       next_cursor: "cursor",
     })).toEqual({
+      device_id: "device-123*",
       device_name: "iPhone*",
       device_model: "iPhone 16",
       os_name: "iOS",
@@ -42,5 +44,9 @@ describe("device query mapping", () => {
 
   it("accepts a numeric app version ID", () => {
     expect(deviceQuery({ current_app_version: 42 }).version).toBe(42);
+  });
+
+  it("caps page size at the devices API limit", () => {
+    expect(deviceQuery({ page_size: 200 }).page_size).toBe(100);
   });
 });

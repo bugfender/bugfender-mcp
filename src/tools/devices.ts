@@ -5,6 +5,8 @@ import type { ServerContext } from "../server-context.js";
 import { readOnlyOAuthMetadata, readOnlyToolAnnotations, toolEnvelopeSchema } from "../tool-metadata.js";
 import { clampPageSize } from "../utils/pagination.js";
 
+const DEVICE_MAX_PAGE_SIZE = 100;
+
 const DEVICE_ORDER = {
   last_active: "seen",
   name_asc: "nameaz",
@@ -12,6 +14,7 @@ const DEVICE_ORDER = {
 } as const;
 
 type DeviceFilters = {
+  device_id?: string;
   name?: string;
   model?: string;
   os_name?: string;
@@ -29,6 +32,7 @@ export function deviceQuery(
   },
 ): Record<string, unknown> {
   return {
+    device_id: filters.device_id,
     device_name: filters.name,
     device_model: filters.model,
     os_name: filters.os_name,
@@ -38,7 +42,7 @@ export function deviceQuery(
     device_status: filters.enabled === undefined ? undefined : Number(filters.enabled),
     order: DEVICE_ORDER[filters.order ?? "last_active"],
     format: "json",
-    page_size: clampPageSize(filters.page_size),
+    page_size: Math.min(clampPageSize(filters.page_size), DEVICE_MAX_PAGE_SIZE),
     next_cursor: filters.next_cursor,
   };
 }
@@ -51,6 +55,7 @@ export function registerDeviceTools(server: McpServer, context: ServerContext): 
       description: "Searches devices observed by a Bugfender app using device, platform, version, and custom-data filters.",
       inputSchema: {
         app_id: z.string().describe("Public app ID returned by list_apps."),
+        device_id: z.string().optional().describe("Filter by device UID/UDID. Use * as a suffix wildcard for a prefix match."),
         name: z.string().optional().describe("Filter by device name. Use * as suffix wildcard (e.g. iPhone*)"),
         model: z.string().optional().describe("Filter by device model."),
         os_name: z.string().optional().describe("Filter by operating system name (e.g. iOS, Android)."),
@@ -83,6 +88,7 @@ export function registerDeviceTools(server: McpServer, context: ServerContext): 
       description: "Counts devices observed by a Bugfender app that match the supplied filters.",
       inputSchema: {
         app_id: z.string().describe("Public app ID returned by list_apps."),
+        device_id: z.string().optional().describe("Filter by device UID/UDID. Use * as a suffix wildcard for a prefix match."),
         name: z.string().optional().describe("Filter by device name."),
         model: z.string().optional().describe("Filter by device model."),
         os_name: z.string().optional().describe("Filter by operating system name."),
