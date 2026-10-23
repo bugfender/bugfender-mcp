@@ -13,7 +13,7 @@ const DEFAULT_MAX_CONCURRENCY = 100;
 const DEFAULT_REQUEST_TIMEOUT_MS = 35_000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
 const DEFAULT_HOSTED_API_URL = "https://app.bugfender.com/api";
-const DEFAULT_RESOURCE_URL = "https://mcp.bugfender.com";
+const DEFAULT_RESOURCE_URL = "https://mcp.bugfender.com/mcp";
 const DEFAULT_AUTHORIZATION_SERVER_URL = "https://app.bugfender.com";
 const DEFAULT_RESOURCE_DOCUMENTATION_URL = "https://docs.bugfender.com/docs/mcp/overview";
 const DEFAULT_RESOURCE_POLICY_URL = "https://bugfender.com/privacy-policy/";
@@ -129,6 +129,27 @@ function httpsOrigin(value: string, name: string): string {
   return parsed.origin;
 }
 
+function httpsResourceUrl(value: string, name: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid URL`);
+  }
+  if (
+    parsed.protocol !== "https:"
+    || parsed.username !== ""
+    || parsed.password !== ""
+    || parsed.search !== ""
+    || parsed.hash !== ""
+    || parsed.pathname === "/"
+    || parsed.pathname.endsWith("/")
+  ) {
+    throw new Error(`${name} must be an HTTPS endpoint URL without credentials, a trailing slash, query, or fragment`);
+  }
+  return parsed.toString();
+}
+
 export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): HostedHttpOptions {
   return {
     apiUrl: env.BUGFENDER_API_URL || DEFAULT_HOSTED_API_URL,
@@ -159,7 +180,7 @@ export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): Hos
       DEFAULT_SHUTDOWN_TIMEOUT_MS,
       "BUGFENDER_MCP_SHUTDOWN_TIMEOUT_MS",
     ),
-    resourceUrl: httpsOrigin(
+    resourceUrl: httpsResourceUrl(
       env.BUGFENDER_MCP_RESOURCE_URL || DEFAULT_RESOURCE_URL,
       "BUGFENDER_MCP_RESOURCE_URL",
     ),

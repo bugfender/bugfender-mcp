@@ -21,7 +21,7 @@ function options(overrides: Partial<HostedHttpOptions> = {}): HostedHttpOptions 
     maxConcurrency: 10,
     requestTimeoutMs: 2_000,
     shutdownTimeoutMs: 500,
-    resourceUrl: "https://mcp.test",
+    resourceUrl: "https://mcp.test/mcp",
     authorizationServerUrl: "https://dashboard.test",
     resourceDocumentationUrl: "https://docs.test/mcp",
     resourcePolicyUrl: "https://www.test/privacy",
@@ -88,7 +88,7 @@ describe("hosted HTTP server", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({
-      resource: "https://mcp.test",
+      resource: "https://mcp.test/mcp",
       resource_name: "Bugfender MCP",
       authorization_servers: ["https://dashboard.test"],
       scopes_supported: ["mcp:read", "mcp:issues:write"],
@@ -455,8 +455,8 @@ describe("hosted HTTP server", () => {
 
 describe("hosted configuration", () => {
   it("creates isolated non-persisting runtime configuration", () => {
-    const first = createHostedRuntimeConfig("first-token", "https://api.test/", "https://mcp.test");
-    const second = createHostedRuntimeConfig("second-token", "https://api.test/", "https://mcp.test");
+    const first = createHostedRuntimeConfig("first-token", "https://api.test/", "https://mcp.test/mcp");
+    const second = createHostedRuntimeConfig("second-token", "https://api.test/", "https://mcp.test/mcp");
 
     expect(first).not.toBe(second);
     expect(first.apiToken).toBe("first-token");
@@ -471,7 +471,7 @@ describe("hosted configuration", () => {
   it("loads limits from environment and rejects invalid values", () => {
     expect(loadHostedHttpOptions({}).port).toBe(3002);
     expect(loadHostedHttpOptions({}).apiUrl).toBe("https://app.bugfender.com/api");
-    expect(loadHostedHttpOptions({}).resourceUrl).toBe("https://mcp.bugfender.com");
+    expect(loadHostedHttpOptions({}).resourceUrl).toBe("https://mcp.bugfender.com/mcp");
     expect(loadHostedHttpOptions({}).authorizationServerUrl).toBe("https://app.bugfender.com");
     const loaded = loadHostedHttpOptions({
       BUGFENDER_MCP_PORT: "4000",
@@ -482,8 +482,12 @@ describe("hosted configuration", () => {
     expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_PORT: "nope" })).toThrow(
       "BUGFENDER_MCP_PORT must be a positive integer",
     );
-    expect(loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test/" }).resourceUrl)
-      .toBe("https://mcp.test");
+    expect(loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test/mcp" }).resourceUrl)
+      .toBe("https://mcp.test/mcp");
+    expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test" }))
+      .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS endpoint URL");
+    expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test/mcp/" }))
+      .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS endpoint URL");
     expect(() => loadHostedHttpOptions({ BUGFENDER_OAUTH_ISSUER: "http://dashboard.test" }))
       .toThrow("BUGFENDER_OAUTH_ISSUER must be an HTTPS origin");
   });
