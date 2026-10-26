@@ -2,6 +2,8 @@
 
 ## Hosted MCP release
 
+For Claude releases, complete [CLAUDE_RELEASE_CHECKLIST.md](./CLAUDE_RELEASE_CHECKLIST.md), including MCP Inspector validation and real custom-connector acceptance in Claude.ai and Claude Code.
+
 The hosted service is the primary public distribution. Before publishing its
 registry metadata:
 
