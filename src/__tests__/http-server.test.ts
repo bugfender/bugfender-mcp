@@ -181,6 +181,7 @@ describe("hosted HTTP server", () => {
 
     for (const tool of tools) {
       expect(tool.name).toMatch(/^[a-z][a-z0-9_]*$/);
+      expect(tool.name.length, `${tool.name} exceeds Anthropic's 64-character limit`).toBeLessThanOrEqual(64);
       expect(tool.title?.trim()).toBeTruthy();
       expect(tool.description?.trim()).toBeTruthy();
       const outputVariants = [tool.outputSchema, ...(tool.outputSchema?.anyOf ?? [])];
@@ -386,7 +387,7 @@ describe("hosted HTTP server", () => {
       const headers = new Headers(init?.headers);
       const authorization = headers.get("Authorization");
       await new Promise((resolve) => setTimeout(resolve, authorization === "Bearer first-user-token" ? 20 : 5));
-      return new Response(JSON.stringify({ authorization }), {
+      return new Response(JSON.stringify({ caller: authorization === "Bearer first-user-token" ? "first" : "second" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -419,11 +420,11 @@ describe("hosted HTTP server", () => {
 
     expect(first.result?.structuredContent).toEqual({
       ok: true,
-      data: { authorization: "Bearer first-user-token" },
+      data: { caller: "first" },
     });
     expect(second.result?.structuredContent).toEqual({
       ok: true,
-      data: { authorization: "Bearer second-user-token" },
+      data: { caller: "second" },
     });
   });
 

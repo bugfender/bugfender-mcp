@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { MAX_RESPONSE_BYTES } from "./constants.js";
+import { MAX_HTTP_RESPONSE_BYTES } from "./constants.js";
 import { createBugfenderServer } from "./server.js";
 import { MCP_READ_SCOPE, oauthChallenge } from "./oauth.js";
 import type { RuntimeConfig } from "./types.js";
@@ -162,7 +162,7 @@ export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): Hos
     ),
     maxResponseBytes: positiveInteger(
       env.BUGFENDER_MCP_MAX_RESPONSE_BYTES,
-      MAX_RESPONSE_BYTES,
+      MAX_HTTP_RESPONSE_BYTES,
       "BUGFENDER_MCP_MAX_RESPONSE_BYTES",
     ),
     maxConcurrency: positiveInteger(
