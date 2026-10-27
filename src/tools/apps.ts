@@ -19,7 +19,7 @@ export function registerAppTools(server: McpServer, context: ServerContext): voi
     annotations: readOnlyToolAnnotations,
     _meta: readOnlyOAuthMetadata,
   }, () =>
-    handleTool(context, async () => ok(omitCredentials(await context.client.get("/app/")))),
+    handleTool(context, async () => ok(omitCredentials(await context.client.get("/apps")))),
   );
 
   server.registerTool("get_app", {
@@ -48,7 +48,7 @@ export function registerAppTools(server: McpServer, context: ServerContext): voi
     "get_sdk_snippet",
     {
       title: "Get Bugfender SDK Snippet",
-      description: "Generates the Bugfender SDK setup snippet for an app and supported platform.",
+      description: "Generates a client-side Bugfender SDK setup snippet, including the selected app's SDK key, for a supported platform.",
       inputSchema: {
         app_id: z.string().describe("Public app ID returned by list_apps (for example, 5X3c4veRGV)."),
         platform: z.enum(["ios", "android", "web", "flutter"]).describe("Target SDK platform."),

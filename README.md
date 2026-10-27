@@ -212,17 +212,16 @@ exposes Prometheus metrics on `GET /metrics` for cluster-internal scraping.
 Hosted mode publishes OAuth protected-resource metadata at
 `GET /.well-known/oauth-protected-resource`. Authentication challenges point
 clients to that document. Production defaults to resource
-`https://mcp.bugfender.com`, issuer `https://app.bugfender.com`, and API
+`https://mcp.bugfender.com/mcp`, issuer `https://app.bugfender.com`, and API
 `https://app.bugfender.com/api`;
 staging deployments must override `BUGFENDER_MCP_RESOURCE_URL` and
-`BUGFENDER_OAUTH_ISSUER` and `BUGFENDER_API_URL` with their staging origins.
+`BUGFENDER_OAUTH_ISSUER` and `BUGFENDER_API_URL` with their staging values.
 Documentation, privacy, and terms links can be overridden with `BUGFENDER_MCP_DOCUMENTATION_URL`,
 `BUGFENDER_MCP_PRIVACY_POLICY_URL`, and `BUGFENDER_MCP_TERMS_URL`.
 
 ### Hosted authentication troubleshooting
 
-- Use the exact endpoint `https://mcp.bugfender.com/mcp`; the OAuth resource is
-  the origin `https://mcp.bugfender.com` without `/mcp`.
+- Use the exact endpoint and OAuth resource `https://mcp.bugfender.com/mcp`.
 - Do not configure `BUGFENDER_API_TOKEN` or paste a bearer token into a remote-hosted connection.
 - Disconnect and reconnect to recover from expired or revoked grants or to
   request different scopes.

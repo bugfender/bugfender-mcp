@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 export const DEFAULT_API_URL = "https://dashboard.bugfender.com/api";
 export const DEFAULT_PAGE_SIZE = 100;
 export const MAX_PAGE_SIZE = 200;
-export const MAX_RESPONSE_BYTES = 512 * 1024;
+export const MAX_TOOL_RESULT_BYTES = 96 * 1024;
+export const MAX_HTTP_RESPONSE_BYTES = 512 * 1024;
 
 export const SERVER_NAME = "bugfender";
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { MAX_RESPONSE_BYTES } from "./constants.js";
+import { MAX_HTTP_RESPONSE_BYTES } from "./constants.js";
 import { createBugfenderServer } from "./server.js";
 import { MCP_READ_SCOPE, oauthChallenge } from "./oauth.js";
 import type { RuntimeConfig } from "./types.js";
@@ -13,7 +13,7 @@ const DEFAULT_MAX_CONCURRENCY = 100;
 const DEFAULT_REQUEST_TIMEOUT_MS = 35_000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
 const DEFAULT_HOSTED_API_URL = "https://app.bugfender.com/api";
-const DEFAULT_RESOURCE_URL = "https://mcp.bugfender.com";
+const DEFAULT_RESOURCE_URL = "https://mcp.bugfender.com/mcp";
 const DEFAULT_AUTHORIZATION_SERVER_URL = "https://app.bugfender.com";
 const DEFAULT_RESOURCE_DOCUMENTATION_URL = "https://docs.bugfender.com/docs/mcp/overview";
 const DEFAULT_RESOURCE_POLICY_URL = "https://bugfender.com/privacy-policy/";
@@ -109,7 +109,11 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
   return parsed;
 }
 
-function httpsOrigin(value: string, name: string): string {
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
+function secureOrigin(value: string, name: string): string {
   let parsed: URL;
   try {
     parsed = new URL(value);
@@ -117,16 +121,37 @@ function httpsOrigin(value: string, name: string): string {
     throw new Error(`${name} must be a valid URL`);
   }
   if (
-    parsed.protocol !== "https:"
+    (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLoopbackHostname(parsed.hostname)))
     || parsed.username !== ""
     || parsed.password !== ""
     || parsed.pathname !== "/"
     || parsed.search !== ""
     || parsed.hash !== ""
   ) {
-    throw new Error(`${name} must be an HTTPS origin without credentials, path, query, or fragment`);
+    throw new Error(`${name} must be an HTTPS or loopback HTTP origin without credentials, path, query, or fragment`);
   }
   return parsed.origin;
+}
+
+function secureResourceUrl(value: string, name: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid URL`);
+  }
+  if (
+    (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLoopbackHostname(parsed.hostname)))
+    || parsed.username !== ""
+    || parsed.password !== ""
+    || parsed.search !== ""
+    || parsed.hash !== ""
+    || parsed.pathname === "/"
+    || parsed.pathname.endsWith("/")
+  ) {
+    throw new Error(`${name} must be an HTTPS or loopback HTTP endpoint URL without credentials, a trailing slash, query, or fragment`);
+  }
+  return parsed.toString();
 }
 
 export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): HostedHttpOptions {
@@ -141,7 +166,7 @@ export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): Hos
     ),
     maxResponseBytes: positiveInteger(
       env.BUGFENDER_MCP_MAX_RESPONSE_BYTES,
-      MAX_RESPONSE_BYTES,
+      MAX_HTTP_RESPONSE_BYTES,
       "BUGFENDER_MCP_MAX_RESPONSE_BYTES",
     ),
     maxConcurrency: positiveInteger(
@@ -159,11 +184,11 @@ export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): Hos
       DEFAULT_SHUTDOWN_TIMEOUT_MS,
       "BUGFENDER_MCP_SHUTDOWN_TIMEOUT_MS",
     ),
-    resourceUrl: httpsOrigin(
+    resourceUrl: secureResourceUrl(
       env.BUGFENDER_MCP_RESOURCE_URL || DEFAULT_RESOURCE_URL,
       "BUGFENDER_MCP_RESOURCE_URL",
     ),
-    authorizationServerUrl: httpsOrigin(
+    authorizationServerUrl: secureOrigin(
       env.BUGFENDER_OAUTH_ISSUER || DEFAULT_AUTHORIZATION_SERVER_URL,
       "BUGFENDER_OAUTH_ISSUER",
     ),

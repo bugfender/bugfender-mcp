@@ -21,7 +21,7 @@ function options(overrides: Partial<HostedHttpOptions> = {}): HostedHttpOptions 
     maxConcurrency: 10,
     requestTimeoutMs: 2_000,
     shutdownTimeoutMs: 500,
-    resourceUrl: "https://mcp.test",
+    resourceUrl: "https://mcp.test/mcp",
     authorizationServerUrl: "https://dashboard.test",
     resourceDocumentationUrl: "https://docs.test/mcp",
     resourcePolicyUrl: "https://www.test/privacy",
@@ -88,7 +88,7 @@ describe("hosted HTTP server", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({
-      resource: "https://mcp.test",
+      resource: "https://mcp.test/mcp",
       resource_name: "Bugfender MCP",
       authorization_servers: ["https://dashboard.test"],
       scopes_supported: ["mcp:read", "mcp:issues:write"],
@@ -181,6 +181,7 @@ describe("hosted HTTP server", () => {
 
     for (const tool of tools) {
       expect(tool.name).toMatch(/^[a-z][a-z0-9_]*$/);
+      expect(tool.name.length, `${tool.name} exceeds Anthropic's 64-character limit`).toBeLessThanOrEqual(64);
       expect(tool.title?.trim()).toBeTruthy();
       expect(tool.description?.trim()).toBeTruthy();
       const outputVariants = [tool.outputSchema, ...(tool.outputSchema?.anyOf ?? [])];
@@ -386,7 +387,7 @@ describe("hosted HTTP server", () => {
       const headers = new Headers(init?.headers);
       const authorization = headers.get("Authorization");
       await new Promise((resolve) => setTimeout(resolve, authorization === "Bearer first-user-token" ? 20 : 5));
-      return new Response(JSON.stringify({ authorization }), {
+      return new Response(JSON.stringify({ caller: authorization === "Bearer first-user-token" ? "first" : "second" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -419,11 +420,11 @@ describe("hosted HTTP server", () => {
 
     expect(first.result?.structuredContent).toEqual({
       ok: true,
-      data: { authorization: "Bearer first-user-token" },
+      data: { caller: "first" },
     });
     expect(second.result?.structuredContent).toEqual({
       ok: true,
-      data: { authorization: "Bearer second-user-token" },
+      data: { caller: "second" },
     });
   });
 
@@ -455,8 +456,8 @@ describe("hosted HTTP server", () => {
 
 describe("hosted configuration", () => {
   it("creates isolated non-persisting runtime configuration", () => {
-    const first = createHostedRuntimeConfig("first-token", "https://api.test/", "https://mcp.test");
-    const second = createHostedRuntimeConfig("second-token", "https://api.test/", "https://mcp.test");
+    const first = createHostedRuntimeConfig("first-token", "https://api.test/", "https://mcp.test/mcp");
+    const second = createHostedRuntimeConfig("second-token", "https://api.test/", "https://mcp.test/mcp");
 
     expect(first).not.toBe(second);
     expect(first.apiToken).toBe("first-token");
@@ -471,7 +472,7 @@ describe("hosted configuration", () => {
   it("loads limits from environment and rejects invalid values", () => {
     expect(loadHostedHttpOptions({}).port).toBe(3002);
     expect(loadHostedHttpOptions({}).apiUrl).toBe("https://app.bugfender.com/api");
-    expect(loadHostedHttpOptions({}).resourceUrl).toBe("https://mcp.bugfender.com");
+    expect(loadHostedHttpOptions({}).resourceUrl).toBe("https://mcp.bugfender.com/mcp");
     expect(loadHostedHttpOptions({}).authorizationServerUrl).toBe("https://app.bugfender.com");
     const loaded = loadHostedHttpOptions({
       BUGFENDER_MCP_PORT: "4000",
@@ -482,9 +483,22 @@ describe("hosted configuration", () => {
     expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_PORT: "nope" })).toThrow(
       "BUGFENDER_MCP_PORT must be a positive integer",
     );
-    expect(loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test/" }).resourceUrl)
-      .toBe("https://mcp.test");
+    expect(loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test/mcp" }).resourceUrl)
+      .toBe("https://mcp.test/mcp");
+    expect(loadHostedHttpOptions({
+      BUGFENDER_MCP_RESOURCE_URL: "http://localhost:3002/mcp",
+      BUGFENDER_OAUTH_ISSUER: "http://127.0.0.1:3000",
+    })).toMatchObject({
+      resourceUrl: "http://localhost:3002/mcp",
+      authorizationServerUrl: "http://127.0.0.1:3000",
+    });
+    expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test" }))
+      .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS or loopback HTTP endpoint URL");
+    expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test/mcp/" }))
+      .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS or loopback HTTP endpoint URL");
+    expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "http://mcp.test/mcp" }))
+      .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS or loopback HTTP endpoint URL");
     expect(() => loadHostedHttpOptions({ BUGFENDER_OAUTH_ISSUER: "http://dashboard.test" }))
-      .toThrow("BUGFENDER_OAUTH_ISSUER must be an HTTPS origin");
+      .toThrow("BUGFENDER_OAUTH_ISSUER must be an HTTPS or loopback HTTP origin");
   });
 });
