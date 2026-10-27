@@ -109,7 +109,11 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
   return parsed;
 }
 
-function httpsOrigin(value: string, name: string): string {
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
+function secureOrigin(value: string, name: string): string {
   let parsed: URL;
   try {
     parsed = new URL(value);
@@ -117,19 +121,19 @@ function httpsOrigin(value: string, name: string): string {
     throw new Error(`${name} must be a valid URL`);
   }
   if (
-    parsed.protocol !== "https:"
+    (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLoopbackHostname(parsed.hostname)))
     || parsed.username !== ""
     || parsed.password !== ""
     || parsed.pathname !== "/"
     || parsed.search !== ""
     || parsed.hash !== ""
   ) {
-    throw new Error(`${name} must be an HTTPS origin without credentials, path, query, or fragment`);
+    throw new Error(`${name} must be an HTTPS or loopback HTTP origin without credentials, path, query, or fragment`);
   }
   return parsed.origin;
 }
 
-function httpsResourceUrl(value: string, name: string): string {
+function secureResourceUrl(value: string, name: string): string {
   let parsed: URL;
   try {
     parsed = new URL(value);
@@ -137,7 +141,7 @@ function httpsResourceUrl(value: string, name: string): string {
     throw new Error(`${name} must be a valid URL`);
   }
   if (
-    parsed.protocol !== "https:"
+    (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLoopbackHostname(parsed.hostname)))
     || parsed.username !== ""
     || parsed.password !== ""
     || parsed.search !== ""
@@ -145,7 +149,7 @@ function httpsResourceUrl(value: string, name: string): string {
     || parsed.pathname === "/"
     || parsed.pathname.endsWith("/")
   ) {
-    throw new Error(`${name} must be an HTTPS endpoint URL without credentials, a trailing slash, query, or fragment`);
+    throw new Error(`${name} must be an HTTPS or loopback HTTP endpoint URL without credentials, a trailing slash, query, or fragment`);
   }
   return parsed.toString();
 }
@@ -180,11 +184,11 @@ export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): Hos
       DEFAULT_SHUTDOWN_TIMEOUT_MS,
       "BUGFENDER_MCP_SHUTDOWN_TIMEOUT_MS",
     ),
-    resourceUrl: httpsResourceUrl(
+    resourceUrl: secureResourceUrl(
       env.BUGFENDER_MCP_RESOURCE_URL || DEFAULT_RESOURCE_URL,
       "BUGFENDER_MCP_RESOURCE_URL",
     ),
-    authorizationServerUrl: httpsOrigin(
+    authorizationServerUrl: secureOrigin(
       env.BUGFENDER_OAUTH_ISSUER || DEFAULT_AUTHORIZATION_SERVER_URL,
       "BUGFENDER_OAUTH_ISSUER",
     ),

@@ -485,11 +485,20 @@ describe("hosted configuration", () => {
     );
     expect(loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test/mcp" }).resourceUrl)
       .toBe("https://mcp.test/mcp");
+    expect(loadHostedHttpOptions({
+      BUGFENDER_MCP_RESOURCE_URL: "http://localhost:3002/mcp",
+      BUGFENDER_OAUTH_ISSUER: "http://127.0.0.1:3000",
+    })).toMatchObject({
+      resourceUrl: "http://localhost:3002/mcp",
+      authorizationServerUrl: "http://127.0.0.1:3000",
+    });
     expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test" }))
-      .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS endpoint URL");
+      .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS or loopback HTTP endpoint URL");
     expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "https://mcp.test/mcp/" }))
-      .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS endpoint URL");
+      .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS or loopback HTTP endpoint URL");
+    expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_RESOURCE_URL: "http://mcp.test/mcp" }))
+      .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS or loopback HTTP endpoint URL");
     expect(() => loadHostedHttpOptions({ BUGFENDER_OAUTH_ISSUER: "http://dashboard.test" }))
-      .toThrow("BUGFENDER_OAUTH_ISSUER must be an HTTPS origin");
+      .toThrow("BUGFENDER_OAUTH_ISSUER must be an HTTPS or loopback HTTP origin");
   });
 });
