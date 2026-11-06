@@ -9,6 +9,7 @@ describe("tool response metadata", () => {
       profile: {
         name: "Example",
         access_token: "access-secret",
+        clientSecret: "client-secret",
       },
       apps: [{ public_id: "abc", refresh_token: "refresh-secret" }],
     })).toEqual({

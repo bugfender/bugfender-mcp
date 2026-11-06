@@ -27,27 +27,65 @@ export const readOnlyToolAnnotations = {
 export const readOnlyOAuthMetadata = oauthSecurityMetadata([MCP_READ_SCOPE]);
 
 const sensitiveResponseFields = new Set([
+  "accesstoken",
   "access_token",
+  "apikey",
   "api_token",
+  "appkey",
+  "auth_token",
+  "authorization",
+  "bearer_token",
+  "clientsecret",
+  "client_secret",
+  "cookie",
   "key",
   "password",
+  "private_key",
+  "refreshtoken",
   "refresh_token",
+  "set-cookie",
   "secret",
+  "session_token",
   "token",
+  "x-api-key",
 ]);
 
+function isSensitiveField(key: string): boolean {
+  return sensitiveResponseFields.has(key.toLowerCase());
+}
+
+function redactSensitiveUrl(value: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return value;
+  }
+  let changed = false;
+  for (const key of [...parsed.searchParams.keys()]) {
+    if (isSensitiveField(key)) {
+      parsed.searchParams.set(key, "[REDACTED]");
+      changed = true;
+    }
+  }
+  return changed ? parsed.toString() : value;
+}
+
 /** Removes credentials from broad account/application responses before they reach an MCP client. */
-export function omitCredentials(value: unknown): unknown {
+export function omitCredentials(value: unknown, parentKey = ""): unknown {
   if (Array.isArray(value)) {
-    return value.map(omitCredentials);
+    return value.map((child) => omitCredentials(child, parentKey));
   }
   if (typeof value !== "object" || value === null) {
+    if (typeof value === "string" && ["url", "uri"].some((suffix) => parentKey.toLowerCase().endsWith(suffix))) {
+      return redactSensitiveUrl(value);
+    }
     return value;
   }
 
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, child]) =>
-      sensitiveResponseFields.has(key.toLowerCase()) ? [] : [[key, omitCredentials(child)]],
+      isSensitiveField(key) ? [] : [[key, omitCredentials(child, key)]],
     ),
   );
 }

@@ -6,6 +6,9 @@ import { readOnlyOAuthMetadata, readOnlyToolAnnotations, toolEnvelopeSchema } fr
 import { normalizeEndDate, normalizeStartDate } from "../utils/date.js";
 import { clampPageSize } from "../utils/pagination.js";
 
+const DEFAULT_LOG_PAGE_SIZE = 25;
+const MAX_LOG_PAGE_SIZE = 100;
+
 export const searchLogsSchema = {
   app_id: z
     .string()
@@ -14,7 +17,7 @@ export const searchLogsSchema = {
   device_udid: z.string().optional().describe("Filter to a specific device by its UDID from search_devices."),
   date_range_start: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T00:00:00Z). Date-only strings like 2026-04-28 are also accepted."),
   date_range_end: z.string().optional().describe("ISO 8601 datetime string (e.g. 2026-04-28T23:59:59Z). Date-only strings like 2026-04-28 are also accepted."),
-  page_size: z.number().int().positive().optional().describe("Number of results per page. Defaults to 100, max 200. Use smaller values (e.g. 25) to avoid truncation."),
+  page_size: z.number().int().positive().optional().describe("Number of log entries per page. Defaults to 25 and is capped at 100."),
   cursor: z.string().optional().describe("Pagination cursor from pagination.next in a previous response."),
   level: z
     .number()
@@ -53,7 +56,7 @@ export function registerLogTools(
         query_id?: string;
       }>(`/app/${app_id}/logs/paginated`, {
         ...filters,
-        page_size: clampPageSize(page_size),
+        page_size: Math.min(clampPageSize(page_size ?? DEFAULT_LOG_PAGE_SIZE), MAX_LOG_PAGE_SIZE),
         date_range_start: normalizeStartDate(date_range_start),
         date_range_end: normalizeEndDate(date_range_end),
       });

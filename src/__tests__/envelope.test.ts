@@ -35,10 +35,10 @@ describe("toolError", () => {
     expect(result.error.code).toBe("unauthorized");
   });
 
-  it("maps 409 status to email_taken code", () => {
+  it("maps 409 status to conflict code", () => {
     const err = new BugfenderApiError("fail", 409, null);
     const result = toolError(err, true) as ErrorEnvelope;
-    expect(result.error.code).toBe("email_taken");
+    expect(result.error.code).toBe("conflict");
   });
 
   it("maps refresh_expired body code to token_expired", () => {
@@ -53,38 +53,53 @@ describe("toolError", () => {
     expect(result.error.code).toBe("api_error");
   });
 
-  it("uses body message when present", () => {
-    const err = new BugfenderApiError("fail", 400, { message: "Bad input" });
+  it("does not expose API response details", () => {
+    const err = new BugfenderApiError("internal route detail", 400, { message: "secret backend detail" });
     const result = toolError(err, true) as ErrorEnvelope;
-    expect(result.error.message).toBe("Bad input");
+    expect(result.error.message).toBe("Bugfender rejected the request. Check the tool arguments and try again.");
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(JSON.stringify(result)).not.toContain("internal route");
   });
 
-  it("handles non-BugfenderApiError Error instances", () => {
+  it("does not expose unexpected internal error details", () => {
     const err = new Error("something broke");
     const result = toolError(err, true) as ErrorEnvelope;
     expect(result.error.code).toBe("api_error");
-    expect(result.error.message).toBe("something broke");
+    expect(result.error.message).toBe("Bugfender MCP could not complete the request.");
+  });
+
+  it("retains actionable input validation errors", () => {
+    const err = new Error("Invalid issue status: unknown");
+    const result = toolError(err, true) as ErrorEnvelope;
+    expect(result.error.message).toBe("Invalid issue status: unknown");
   });
 
   it("handles non-Error values", () => {
     const result = toolError("string error", true) as ErrorEnvelope;
     expect(result.error.code).toBe("api_error");
-    expect(result.error.message).toBe("Unknown Bugfender error");
+    expect(result.error.message).toBe("Bugfender MCP could not complete the request.");
   });
 });
 
 describe("serializeEnvelope", () => {
   it("passes through small success envelopes", () => {
     const envelope: Envelope = { ok: true, data: { x: 1 } };
-    expect(serializeEnvelope(envelope)).toBe(envelope);
+    expect(serializeEnvelope(envelope)).toEqual(envelope);
   });
 
-  it("passes through error envelopes regardless of size", () => {
+  it("replaces oversized error envelopes with a safe bounded error", () => {
     const envelope: Envelope = {
       ok: false,
       error: { code: "api_error", message: "x".repeat(600_000) },
     };
-    expect(serializeEnvelope(envelope)).toBe(envelope);
+    expect(serializeEnvelope(envelope)).toEqual({
+      ok: false,
+      error: {
+        code: "response_too_large",
+        message: "Bugfender returned an error that was too large to display safely.",
+        hint: "Retry with narrower filters. If the problem persists, contact Bugfender support.",
+      },
+    });
   });
 
   it("truncates large success envelopes", () => {
@@ -95,6 +110,25 @@ describe("serializeEnvelope", () => {
     expect(result.warnings).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: "truncated" })]),
     );
+    expect(result.warnings?.[0]?.message).toContain("smaller page or narrower filters");
+  });
+
+  it("removes credentials before serializing tool output", () => {
+    const envelope: Envelope = {
+      ok: true,
+      data: {
+        authorization: "Bearer secret",
+        nested: { apiKey: "secret", value: "kept" },
+        url: "https://example.com/callback?token=secret&item=kept",
+      },
+    };
+    expect(serializeEnvelope(envelope)).toEqual({
+      ok: true,
+      data: {
+        nested: { value: "kept" },
+        url: "https://example.com/callback?token=%5BREDACTED%5D&item=kept",
+      },
+    });
   });
 });
 
@@ -113,6 +147,7 @@ describe("handleTool", () => {
       throw new Error("boom");
     });
     expect(result.structuredContent.ok).toBe(false);
+    expect(result.isError).toBe(true);
   });
 
   it("returns OAuth linking metadata for hosted authentication errors", async () => {

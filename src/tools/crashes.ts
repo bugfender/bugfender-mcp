@@ -110,16 +110,19 @@ export function registerCrashTools(server: McpServer, context: ServerContext): v
     inputSchema: {
       app_id: z.string().describe("Public app ID returned by list_apps."),
       hash: z.string().describe("Crash group hash returned by get_crashes or list_issues."),
+      device_page_size: z.number().int().positive().optional().default(25).describe("Maximum affected-device samples to return; defaults to 25 and is capped at 100."),
+      device_page: z.number().int().positive().optional().default(1).describe("One-based affected-device result page; defaults to 1."),
     },
     outputSchema: toolEnvelopeSchema,
     annotations: readOnlyToolAnnotations,
     _meta: readOnlyOAuthMetadata,
-  }, ({ app_id, hash }) =>
+  }, ({ app_id, hash, device_page_size = 25, device_page = 1 }) =>
     handleTool(context, async () => {
       const [details, devices] = await Promise.all([
         context.client.get(`/app/${app_id}/issues-aggregation/${hash}`),
         context.client.get(`/app/${app_id}/issues-aggregation/${hash}/devices`, {
-          page_size: MAX_PAGE_SIZE,
+          page_size: Math.min(device_page_size, 100),
+          page: device_page,
         }),
       ]);
       return ok({ details, devices });
