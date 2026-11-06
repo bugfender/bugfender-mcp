@@ -19,7 +19,7 @@ export function registerAppTools(server: McpServer, context: ServerContext): voi
     annotations: readOnlyToolAnnotations,
     _meta: readOnlyOAuthMetadata,
   }, () =>
-    handleTool(context, async () => ok(omitCredentials(await context.client.get("/apps")))),
+    handleTool(context, async () => ok(omitCredentials(await context.client.get("/app/")))),
   );
 
   server.registerTool("get_app", {
