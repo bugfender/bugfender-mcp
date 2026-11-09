@@ -23,6 +23,7 @@
     "crash-reporting"
   ],
   "bin": {
+    "mcp": "dist/index.js",
     "bugfender-mcp": "dist/index.js",
     "mcp-bugfender": "dist/index.js",
     "bugfender-mcp-http": "dist/http.js"
