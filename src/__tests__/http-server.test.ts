@@ -73,7 +73,7 @@ describe("hosted HTTP server", () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get("www-authenticate")).toBe(
-      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", scope="mcp:read"',
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource/mcp", scope="mcp:read"',
     );
     const body = await response.json() as { error?: { data?: { _meta?: Record<string, string> } } };
     expect(body.error?.data?._meta?.["mcp/www_authenticate"]).toBe(
@@ -81,13 +81,14 @@ describe("hosted HTTP server", () => {
     );
   });
 
-  it("publishes OAuth protected-resource metadata", async () => {
+  it("publishes OAuth protected-resource metadata at the path-qualified URL and compatibility alias", async () => {
     const baseUrl = await start();
-    const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+    const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource/mcp`);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({
+    const metadata = await response.json();
+    expect(metadata).toEqual({
       resource: "https://mcp.test/mcp",
       resource_name: "Bugfender MCP",
       authorization_servers: ["https://dashboard.test"],
@@ -97,6 +98,10 @@ describe("hosted HTTP server", () => {
       resource_policy_uri: "https://www.test/privacy",
       resource_tos_uri: "https://www.test/terms",
     });
+
+    const compatibilityResponse = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+    expect(compatibilityResponse.status).toBe(200);
+    expect(await compatibilityResponse.json()).toEqual(metadata);
   });
 
   it("rejects malformed authorization with an invalid-token challenge", async () => {
@@ -112,7 +117,7 @@ describe("hosted HTTP server", () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get("www-authenticate")).toBe(
-      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", scope="mcp:read", error="invalid_token"',
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource/mcp", scope="mcp:read", error="invalid_token"',
     );
   });
 
@@ -249,7 +254,7 @@ describe("hosted HTTP server", () => {
     };
     expect(body.result?.isError).toBe(true);
     expect(body.result?._meta?.["mcp/www_authenticate"]).toBe(
-      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", scope="mcp:read", error="invalid_token"',
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource/mcp", scope="mcp:read", error="invalid_token"',
     );
     expect(JSON.stringify(body)).not.toContain("internal authentication detail");
     expect(JSON.stringify(body)).not.toContain("expired-token");
@@ -297,7 +302,7 @@ describe("hosted HTTP server", () => {
     };
     expect(body.result?.isError).toBe(true);
     expect(body.result?._meta?.["mcp/www_authenticate"]).toBe(
-      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", scope="mcp:issues:write", error="insufficient_scope"',
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource/mcp", scope="mcp:issues:write", error="insufficient_scope"',
     );
     expect(body.result?.structuredContent).toEqual({
       ok: false,
@@ -466,7 +471,7 @@ describe("hosted configuration", () => {
     expect(first.persistRuntimeTokens).toBe(false);
     expect(first.configPath).toBe("");
     expect(first.hostedOAuth?.protectedResourceMetadataUrl)
-      .toBe("https://mcp.test/.well-known/oauth-protected-resource");
+      .toBe("https://mcp.test/.well-known/oauth-protected-resource/mcp");
   });
 
   it("loads limits from environment and rejects invalid values", () => {

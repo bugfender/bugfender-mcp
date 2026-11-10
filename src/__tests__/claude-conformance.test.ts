@@ -136,7 +136,7 @@ describe("Claude remote connector conformance", () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get("www-authenticate")).toBe(
-      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource", scope="mcp:read"',
+      'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource/mcp", scope="mcp:read"',
     );
   });
 
@@ -149,7 +149,7 @@ describe("Claude remote connector conformance", () => {
 
   it("advertises the intended issuer first and binds discovery to the exact MCP resource", async () => {
     const baseUrl = await start();
-    const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+    const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource/mcp`);
     expect(await response.json()).toMatchObject({
       resource: "https://mcp.test/mcp",
       authorization_servers: ["https://issuer.test"],
@@ -159,7 +159,7 @@ describe("Claude remote connector conformance", () => {
 
   it("keeps discovery and tool-list responses within the hosted response budget", async () => {
     const baseUrl = await start();
-    const discovery = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+    const discovery = await fetch(`${baseUrl}/.well-known/oauth-protected-resource/mcp`);
     const tools = await mcp(baseUrl, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
     expect(Buffer.byteLength(await discovery.text())).toBeLessThan(512 * 1024);
     expect(Buffer.byteLength(await tools.text())).toBeLessThan(512 * 1024);

@@ -199,8 +199,15 @@ export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): Hos
   };
 }
 
+function protectedResourceMetadataUrlForResource(resourceUrl: string): string {
+  const resource = new URL(resourceUrl);
+  const resourcePath = resource.pathname === "/" ? "" : resource.pathname;
+  resource.pathname = `${PROTECTED_RESOURCE_METADATA_PATH}${resourcePath}`;
+  return resource.toString();
+}
+
 function protectedResourceMetadataUrl(options: HostedHttpOptions): string {
-  return new URL(PROTECTED_RESOURCE_METADATA_PATH, `${options.resourceUrl}/`).toString();
+  return protectedResourceMetadataUrlForResource(options.resourceUrl);
 }
 
 function bearerChallenge(options: HostedHttpOptions, invalidToken = false): string {
@@ -368,7 +375,7 @@ export function createHostedRuntimeConfig(token: string, apiUrl: string, resourc
     configPath: "",
     persistRuntimeTokens: false,
     hostedOAuth: {
-      protectedResourceMetadataUrl: new URL(PROTECTED_RESOURCE_METADATA_PATH, `${resourceUrl}/`).toString(),
+      protectedResourceMetadataUrl: protectedResourceMetadataUrlForResource(resourceUrl),
     },
   };
 }
@@ -435,7 +442,13 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
       sendText(res, 200, prometheusMetrics(metrics), "text/plain; version=0.0.4; charset=utf-8");
       return;
     }
-    if (path === PROTECTED_RESOURCE_METADATA_PATH) {
+    const pathQualifiedProtectedResourceMetadataPath = new URL(
+      protectedResourceMetadataUrl(options),
+    ).pathname;
+    if (
+      path === PROTECTED_RESOURCE_METADATA_PATH
+      || path === pathQualifiedProtectedResourceMetadataPath
+    ) {
       if (req.method !== "GET") {
         sendJson(res, 405, { error: "Method not allowed" }, { Allow: "GET" });
         return;
