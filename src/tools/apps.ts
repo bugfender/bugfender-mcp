@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { normalizeApps } from "../domain/public-responses.js";
+import { normalizeApps, normalizeAppSummary } from "../domain/public-responses.js";
 import { sdkSnippet } from "../domain/snippets.js";
 import { handleTool, ok } from "../envelope.js";
 import type { ServerContext } from "../server-context.js";
@@ -13,7 +13,6 @@ import {
 } from "../tool-metadata.js";
 
 const appStatsSchema = z.object({
-  has_devices: z.boolean().optional(),
   total_devices: z.number().optional(),
   active_devices_yesterday: z.number().optional(),
   active_devices_today: z.number().optional(),
@@ -32,13 +31,27 @@ const appStatsSchema = z.object({
 const appSummarySchema = z.object({
   public_app_id: z.string().optional().describe("Public app ID used by other Bugfender tools."),
   name: z.string().optional().describe("Application name."),
-  operating_system: z.number().optional().describe("Bugfender operating-system identifier."),
-  debug_mode: z.boolean().optional(),
-  data_collection_enabled: z.boolean().optional(),
-  date_format: z.string().optional(),
-  time_zone: z.string().optional(),
+  platform: z.enum(["ios", "android", "web", "flutter", "unknown"]).optional().describe("Human-readable app platform."),
   team_name: z.string().optional().describe("Name of the team that owns the app."),
   stats: appStatsSchema.optional().describe("Recent app activity and reliability counters."),
+});
+
+const dailySummaryItemSchema = z.object({
+  Title: z.string().optional().describe("Sanitized diagnostic title, limited to 240 characters."),
+  Count: z.number().optional(),
+});
+
+const dailyAppSummarySchema = z.object({
+  App: z.string().optional(),
+  ActiveDevices: z.number().optional(),
+  Crashes: z.number().optional(),
+  Feedback: z.number().optional(),
+  Issues: z.number().optional(),
+  Logs: z.number().optional(),
+  Sessions: z.number().optional(),
+  TopCrashes: z.array(dailySummaryItemSchema),
+  TopFeedback: z.array(dailySummaryItemSchema),
+  TopIssues: z.array(dailySummaryItemSchema),
 });
 
 export function registerAppTools(server: McpServer, context: ServerContext): void {
@@ -104,14 +117,14 @@ export function registerAppTools(server: McpServer, context: ServerContext): voi
         app_id: z.string().describe("Public app ID returned by list_apps (for example, 5X3c4veRGV)."),
         date_range_start: z.string().optional().describe("Day to summarize as YYYY-MM-DD or ISO 8601; defaults to yesterday."),
       },
-      outputSchema: toolEnvelopeSchema,
+      outputSchema: toolEnvelopeWithDataSchema(dailyAppSummarySchema),
       annotations: readOnlyToolAnnotations,
       _meta: readOnlyOAuthMetadata,
     },
     ({ app_id, date_range_start }) =>
       handleTool(context, async () => {
         const date = (date_range_start ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()).slice(0, 10);
-        return ok(await context.client.get(`/app/${app_id}/daily-summary`, { date }));
+        return ok(normalizeAppSummary(await context.client.get(`/app/${app_id}/daily-summary`, { date })));
       }),
   );
 }

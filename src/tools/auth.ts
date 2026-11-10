@@ -1,13 +1,11 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { normalizeCurrentUser } from "../domain/public-responses.js";
+import { normalizeCurrentUser, normalizeTeams } from "../domain/public-responses.js";
 import { handleTool, ok } from "../envelope.js";
 import type { ServerContext } from "../server-context.js";
 import {
-  omitCredentials,
   readOnlyOAuthMetadata,
   readOnlyToolAnnotations,
-  toolEnvelopeSchema,
   toolEnvelopeWithDataSchema,
 } from "../tool-metadata.js";
 
@@ -19,6 +17,13 @@ const currentUserSchema = z.object({
     name: z.string().optional().describe("Bugfender team name."),
     role: z.string().optional().describe("Connected user's role in this team."),
   })).describe("Teams available to the connected user."),
+});
+
+const teamSchema = z.object({
+  name: z.string().optional().describe("Bugfender team name."),
+  role: z.string().optional().describe("Connected user's team-level role; omitted for app-specific access."),
+  active: z.boolean().optional().describe("Whether the team is active."),
+  app_count: z.number().int().nonnegative().describe("Number of apps visible in this team."),
 });
 
 export function registerAuthTools(server: McpServer, context: ServerContext): void {
@@ -39,16 +44,16 @@ export function registerAuthTools(server: McpServer, context: ServerContext): vo
     "list_teams",
     {
       title: "List Bugfender Teams",
-      description: "Lists the Bugfender teams available to the connected account, with credentials removed.",
+      description: "Lists accessible teams with the connected user's role and visible app count.",
       inputSchema: {},
-      outputSchema: toolEnvelopeSchema,
+      outputSchema: toolEnvelopeWithDataSchema(z.array(teamSchema)),
       annotations: readOnlyToolAnnotations,
       _meta: readOnlyOAuthMetadata,
     },
     () =>
       handleTool(context, async () => {
-        const me = await context.client.get<{ teams?: unknown[] }>("/me");
-        return ok(omitCredentials(me.teams ?? []));
+        const me = await context.client.get<{ id?: unknown; teams?: unknown[] }>("/me");
+        return ok(normalizeTeams(me.teams ?? [], me.id));
       }),
   );
 }
