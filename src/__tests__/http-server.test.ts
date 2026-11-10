@@ -392,7 +392,8 @@ describe("hosted HTTP server", () => {
       const headers = new Headers(init?.headers);
       const authorization = headers.get("Authorization");
       await new Promise((resolve) => setTimeout(resolve, authorization === "Bearer first-user-token" ? 20 : 5));
-      return new Response(JSON.stringify({ caller: authorization === "Bearer first-user-token" ? "first" : "second" }), {
+      const caller = authorization === "Bearer first-user-token" ? "first" : "second";
+      return new Response(JSON.stringify({ public_id: caller, name: `${caller} user` }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -414,7 +415,7 @@ describe("hosted HTTP server", () => {
         }),
       });
       return response.json() as Promise<{
-        result?: { structuredContent?: { ok?: boolean; data?: { authorization?: string } } };
+        result?: { structuredContent?: { ok?: boolean; data?: { public_id?: string } } };
       }>;
     };
 
@@ -425,11 +426,11 @@ describe("hosted HTTP server", () => {
 
     expect(first.result?.structuredContent).toEqual({
       ok: true,
-      data: { caller: "first" },
+      data: { public_id: "first", name: "first user", teams: [] },
     });
     expect(second.result?.structuredContent).toEqual({
       ok: true,
-      data: { caller: "second" },
+      data: { public_id: "second", name: "second user", teams: [] },
     });
   });
 

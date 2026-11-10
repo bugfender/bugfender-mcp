@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { normalizeApps } from "../domain/public-responses.js";
 import { sdkSnippet } from "../domain/snippets.js";
 import { handleTool, ok } from "../envelope.js";
 import type { ServerContext } from "../server-context.js";
@@ -8,18 +9,48 @@ import {
   readOnlyOAuthMetadata,
   readOnlyToolAnnotations,
   toolEnvelopeSchema,
+  toolEnvelopeWithDataSchema,
 } from "../tool-metadata.js";
+
+const appStatsSchema = z.object({
+  has_devices: z.boolean().optional(),
+  total_devices: z.number().optional(),
+  active_devices_yesterday: z.number().optional(),
+  active_devices_today: z.number().optional(),
+  logs_yesterday: z.number().optional(),
+  logs_today: z.number().optional(),
+  errors_yesterday: z.number().optional(),
+  errors_today: z.number().optional(),
+  open_crashes_yesterday: z.number().optional(),
+  open_crashes_today: z.number().optional(),
+  open_issues_yesterday: z.number().optional(),
+  open_issues_today: z.number().optional(),
+  open_feedback_yesterday: z.number().optional(),
+  open_feedback_today: z.number().optional(),
+});
+
+const appSummarySchema = z.object({
+  public_app_id: z.string().optional().describe("Public app ID used by other Bugfender tools."),
+  name: z.string().optional().describe("Application name."),
+  operating_system: z.number().optional().describe("Bugfender operating-system identifier."),
+  debug_mode: z.boolean().optional(),
+  data_collection_enabled: z.boolean().optional(),
+  date_format: z.string().optional(),
+  time_zone: z.string().optional(),
+  team_name: z.string().optional().describe("Name of the team that owns the app."),
+  stats: appStatsSchema.optional().describe("Recent app activity and reliability counters."),
+});
 
 export function registerAppTools(server: McpServer, context: ServerContext): void {
   server.registerTool("list_apps", {
     title: "List Bugfender Apps",
-    description: "Lists apps accessible to the connected Bugfender account without returning app credentials.",
+    description: "Lists accessible apps with public identifiers and investigation summary metrics.",
     inputSchema: {},
-    outputSchema: toolEnvelopeSchema,
+    outputSchema: toolEnvelopeWithDataSchema(z.array(appSummarySchema)),
     annotations: readOnlyToolAnnotations,
     _meta: readOnlyOAuthMetadata,
   }, () =>
-    handleTool(context, async () => ok(omitCredentials(await context.client.get("/app/")))),
+    handleTool(context, async () => ok(normalizeApps(await context.client.get("/app/")))),
   );
 
   server.registerTool("get_app", {
