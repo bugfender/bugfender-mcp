@@ -18,6 +18,12 @@ export const toolEnvelopeSchema = z.object({
   }).optional().describe("Error details, present when ok is false."),
 });
 
+export function toolEnvelopeWithDataSchema(data: z.ZodType): z.ZodObject {
+  return toolEnvelopeSchema.extend({
+    data: data.optional().describe("Tool-specific result data, present when ok is true."),
+  });
+}
+
 export const readOnlyToolAnnotations = {
   readOnlyHint: true,
   openWorldHint: true,
