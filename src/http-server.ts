@@ -19,6 +19,7 @@ const DEFAULT_RESOURCE_DOCUMENTATION_URL = "https://docs.bugfender.com/docs/mcp/
 const DEFAULT_RESOURCE_POLICY_URL = "https://bugfender.com/privacy-policy/";
 const DEFAULT_RESOURCE_TERMS_URL = "https://bugfender.com/terms-of-service/";
 const PROTECTED_RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
+const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const MCP_SCOPES = ["mcp:read", "mcp:issues:write"] as const;
 
 export type HostedHttpOptions = {
@@ -35,6 +36,7 @@ export type HostedHttpOptions = {
   resourceDocumentationUrl: string;
   resourcePolicyUrl: string;
   resourceTermsUrl: string;
+  openaiAppsChallengeToken?: string;
 };
 
 type ActiveRequest = {
@@ -107,6 +109,16 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
     throw new Error(`${name} must be a positive integer`);
   }
   return parsed;
+}
+
+function optionalSingleLineValue(value: string | undefined, name: string): string | undefined {
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+  if (value.trim() !== value || /[\u0000-\u001f\u007f]/u.test(value)) {
+    throw new Error(`${name} must be a non-empty single-line value without surrounding whitespace`);
+  }
+  return value;
 }
 
 function isLoopbackHostname(hostname: string): boolean {
@@ -196,6 +208,10 @@ export function loadHostedHttpOptions(env: NodeJS.ProcessEnv = process.env): Hos
       env.BUGFENDER_MCP_DOCUMENTATION_URL || DEFAULT_RESOURCE_DOCUMENTATION_URL,
     resourcePolicyUrl: env.BUGFENDER_MCP_PRIVACY_POLICY_URL || DEFAULT_RESOURCE_POLICY_URL,
     resourceTermsUrl: env.BUGFENDER_MCP_TERMS_URL || DEFAULT_RESOURCE_TERMS_URL,
+    openaiAppsChallengeToken: optionalSingleLineValue(
+      env.BUGFENDER_OPENAI_APPS_CHALLENGE_TOKEN,
+      "BUGFENDER_OPENAI_APPS_CHALLENGE_TOKEN",
+    ),
   };
 }
 
@@ -440,6 +456,14 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
     }
     if (path === "/metrics") {
       sendText(res, 200, prometheusMetrics(metrics), "text/plain; version=0.0.4; charset=utf-8");
+      return;
+    }
+    if (path === OPENAI_APPS_CHALLENGE_PATH && options.openaiAppsChallengeToken !== undefined) {
+      if (req.method !== "GET") {
+        sendJson(res, 405, { error: "Method not allowed" }, { Allow: "GET" });
+        return;
+      }
+      sendText(res, 200, options.openaiAppsChallengeToken, "text/plain; charset=utf-8");
       return;
     }
     const pathQualifiedProtectedResourceMetadataPath = new URL(

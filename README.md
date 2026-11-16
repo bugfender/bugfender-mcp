@@ -193,6 +193,8 @@ Hosted configuration:
 - `BUGFENDER_MCP_MAX_CONCURRENCY` (default `100`)
 - `BUGFENDER_MCP_REQUEST_TIMEOUT_MS` (default `35000`)
 - `BUGFENDER_MCP_SHUTDOWN_TIMEOUT_MS` (default `10000`)
+- `BUGFENDER_OPENAI_APPS_CHALLENGE_TOKEN` (optional; serves the exact plain-text OpenAI
+  domain-verification token at `/.well-known/openai-apps-challenge`)
 
 The hosted entry point uses JSON response mode within the Streamable HTTP
 protocol. It is intentionally stateless, so `GET` and `DELETE` on `/mcp` return
