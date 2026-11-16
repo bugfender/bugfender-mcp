@@ -63,6 +63,31 @@ describe("hosted HTTP server", () => {
     expect(await metrics.text()).toContain("bugfender_mcp_http_requests_total");
   });
 
+  it("serves the configured OpenAI domain-verification token as exact plain text", async () => {
+    const token = "challenge-token_123";
+    const baseUrl = await start({ openaiAppsChallengeToken: token });
+
+    const response = await fetch(`${baseUrl}/.well-known/openai-apps-challenge`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.text()).toBe(token);
+
+    const postResponse = await fetch(`${baseUrl}/.well-known/openai-apps-challenge`, {
+      method: "POST",
+    });
+    expect(postResponse.status).toBe(405);
+    expect(postResponse.headers.get("allow")).toBe("GET");
+  });
+
+  it("does not expose the OpenAI challenge endpoint when no token is configured", async () => {
+    const baseUrl = await start();
+    const response = await fetch(`${baseUrl}/.well-known/openai-apps-challenge`);
+
+    expect(response.status).toBe(404);
+  });
+
   it("requires a bearer token on the MCP endpoint", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/mcp`, {
@@ -483,9 +508,11 @@ describe("hosted configuration", () => {
     const loaded = loadHostedHttpOptions({
       BUGFENDER_MCP_PORT: "4000",
       BUGFENDER_MCP_MAX_CONCURRENCY: "7",
+      BUGFENDER_OPENAI_APPS_CHALLENGE_TOKEN: "challenge-token_123",
     });
     expect(loaded.port).toBe(4000);
     expect(loaded.maxConcurrency).toBe(7);
+    expect(loaded.openaiAppsChallengeToken).toBe("challenge-token_123");
     expect(() => loadHostedHttpOptions({ BUGFENDER_MCP_PORT: "nope" })).toThrow(
       "BUGFENDER_MCP_PORT must be a positive integer",
     );
@@ -506,5 +533,10 @@ describe("hosted configuration", () => {
       .toThrow("BUGFENDER_MCP_RESOURCE_URL must be an HTTPS or loopback HTTP endpoint URL");
     expect(() => loadHostedHttpOptions({ BUGFENDER_OAUTH_ISSUER: "http://dashboard.test" }))
       .toThrow("BUGFENDER_OAUTH_ISSUER must be an HTTPS or loopback HTTP origin");
+    expect(() => loadHostedHttpOptions({
+      BUGFENDER_OPENAI_APPS_CHALLENGE_TOKEN: " challenge-token_123",
+    })).toThrow(
+      "BUGFENDER_OPENAI_APPS_CHALLENGE_TOKEN must be a non-empty single-line value without surrounding whitespace",
+    );
   });
 });
