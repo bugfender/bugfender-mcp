@@ -189,10 +189,14 @@ describe("BugfenderClient", () => {
         .mockRejectedValueOnce(new Error("network error"));
       const client = makeClient();
       await expect(client.get("/test")).rejects.toThrow("token expired");
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "Bugfender token refresh failed:",
-        expect.any(Error),
-      );
+      expect(consoleSpy).toHaveBeenCalledOnce();
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0] as string) as Record<string, unknown>;
+      expect(entry).toMatchObject({
+        level: "error",
+        event: "bugfender_token_refresh_failed",
+        error_name: "Error",
+      });
+      expect(consoleSpy.mock.calls[0][0]).not.toContain("network error");
     });
   });
 
@@ -204,6 +208,19 @@ describe("BugfenderClient", () => {
       const [, init] = fetchSpy.mock.calls[0];
       expect(init.signal).toBeDefined();
     });
+  });
+
+  it("does not log query values, tokens, or raw network error messages", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    fetchSpy.mockRejectedValueOnce(new Error("failed for token=secret and customer-log-payload"));
+    const client = makeClient();
+
+    await expect(client.get("/logs", { query: "customer-log-payload" })).rejects.toThrow();
+
+    const entry = consoleSpy.mock.calls[0][0] as string;
+    expect(entry).toContain('"path":"/logs"');
+    expect(entry).not.toContain("secret");
+    expect(entry).not.toContain("customer-log-payload");
   });
 
   describe("auth requirement", () => {

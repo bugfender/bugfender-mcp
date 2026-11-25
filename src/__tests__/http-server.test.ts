@@ -104,6 +104,8 @@ describe("hosted HTTP server", () => {
     expect(body.error?.data?._meta?.["mcp/www_authenticate"]).toBe(
       response.headers.get("www-authenticate"),
     );
+    const metrics = await fetch(`${baseUrl}/metrics`).then((result) => result.text());
+    expect(metrics).toContain('bugfender_mcp_auth_failures_total{stage="bearer",reason="missing_token"} 1');
   });
 
   it("publishes OAuth protected-resource metadata at the path-qualified URL and compatibility alias", async () => {
@@ -373,6 +375,9 @@ describe("hosted HTTP server", () => {
     });
 
     expect(response.status).toBe(502);
+    const metrics = await fetch(`${baseUrl}/metrics`).then((result) => result.text());
+    expect(metrics).toContain('bugfender_mcp_response_truncations_total{reason="http_response_limit"} 1');
+    expect(metrics).toContain('bugfender_mcp_client_initializations_total{client="other",version="1.0",protocol="2025-06-18"} 1');
   });
 
   it("enforces the concurrency limit", async () => {
@@ -400,6 +405,8 @@ describe("hosted HTTP server", () => {
 
     expect(response.status).toBe(503);
     expect(response.headers.get("retry-after")).toBe("1");
+    const metrics = await fetch(`${baseUrl}/metrics`).then((result) => result.text());
+    expect(metrics).toContain('bugfender_mcp_saturation_events_total{reason="concurrency_limit"} 1');
     pending.destroy();
   });
 
@@ -457,6 +464,9 @@ describe("hosted HTTP server", () => {
       ok: true,
       data: { public_id: "second", name: "second user", teams: [] },
     });
+    const metrics = await fetch(`${baseUrl}/metrics`).then((result) => result.text());
+    expect(metrics).toContain('bugfender_mcp_tool_invocations_total{tool="who_am_i"} 2');
+    expect(metrics).toContain('bugfender_mcp_api_responses_total{status="200"} 2');
   });
 
   it("times out the complete request, including body receipt", async () => {
