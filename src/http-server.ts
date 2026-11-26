@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { MAX_HTTP_RESPONSE_BYTES } from "./constants.js";
+import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
+import { MAX_HTTP_RESPONSE_BYTES, SERVER_VERSION } from "./constants.js";
 import { createBugfenderServer } from "./server.js";
 import { MCP_READ_SCOPE, oauthChallenge } from "./oauth.js";
 import type { RuntimeConfig } from "./types.js";
@@ -21,6 +22,35 @@ const DEFAULT_RESOURCE_TERMS_URL = "https://bugfender.com/terms-of-service/";
 const PROTECTED_RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const MCP_SCOPES = ["mcp:read", "mcp:issues:write"] as const;
+
+// Keep this allowlist in sync with the tools registered in src/tools.
+const METRIC_TOOL_NAMES = new Set([
+  "count_devices",
+  "count_devices_with_logs",
+  "count_logs",
+  "get_app",
+  "get_app_summary",
+  "get_crash_details",
+  "get_crash_device_stats",
+  "get_crash_stats",
+  "get_crashes",
+  "get_feedback",
+  "get_issue",
+  "get_issue_device_stats",
+  "get_issue_devices",
+  "get_issue_stats",
+  "get_network_aggregates",
+  "get_network_details",
+  "get_sdk_snippet",
+  "list_app_versions",
+  "list_apps",
+  "list_issues",
+  "list_teams",
+  "search_devices",
+  "search_logs",
+  "update_issue_status",
+  "who_am_i",
+]);
 
 export type HostedHttpOptions = {
   apiUrl: string;
@@ -59,6 +89,13 @@ type HttpMetrics = {
   active: number;
   durationSeconds: number;
   requests: Map<string, number>;
+  toolInvocations: Map<string, number>;
+  apiResponses: Map<string, number>;
+  apiDurationSeconds: number;
+  authFailures: Map<string, number>;
+  truncations: Map<string, number>;
+  saturation: Map<string, number>;
+  clients: Map<string, number>;
 };
 
 function structuredLog(level: "info" | "error", event: string, fields: Record<string, unknown> = {}): void {
@@ -69,6 +106,64 @@ function recordRequest(metrics: HttpMetrics, method: string, path: string, statu
   const key = `${method}\u0000${path}\u0000${status}`;
   metrics.requests.set(key, (metrics.requests.get(key) || 0) + 1);
   metrics.durationSeconds += durationMs / 1000;
+}
+
+function increment(metrics: Map<string, number>, key: string): void {
+  metrics.set(key, (metrics.get(key) || 0) + 1);
+}
+
+function escapeLabel(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+}
+
+function boundedLabel(value: unknown, fallback: string, pattern: RegExp, maxLength = 64): string {
+  return typeof value === "string" && value.length <= maxLength && pattern.test(value) ? value : fallback;
+}
+
+function clientFamily(value: unknown): string {
+  const name = boundedLabel(value, "other", /^[A-Za-z0-9_. -]+$/u, 48).toLowerCase();
+  if (name.includes("claude")) return "claude";
+  if (name.includes("codex") || name.includes("chatgpt") || name.includes("openai")) return "openai";
+  if (name.includes("cursor")) return "cursor";
+  if (name.includes("vscode") || name.includes("visual studio")) return "vscode";
+  return "other";
+}
+
+function compatibleVersion(value: unknown): string {
+  if (typeof value !== "string") return "unknown";
+  const match = /^(\d)\.(0|[1-9]\d?)(?=\.|[-+]|$)/u.exec(value);
+  return match ? `${match[1]}.${match[2]}` : "unknown";
+}
+
+function protocolFamily(value: unknown): string {
+  return typeof value === "string" && SUPPORTED_PROTOCOL_VERSIONS.includes(value)
+    ? value
+    : "other";
+}
+
+function recordMcpMessage(metrics: HttpMetrics, body: unknown): void {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return;
+  }
+  const message = body as Record<string, unknown>;
+  const params = message.params && typeof message.params === "object" && !Array.isArray(message.params)
+    ? message.params as Record<string, unknown>
+    : undefined;
+  if (message.method === "tools/call") {
+    const name = params?.name;
+    if (typeof name === "string" && METRIC_TOOL_NAMES.has(name)) {
+      increment(metrics.toolInvocations, name);
+    }
+  }
+  if (message.method === "initialize") {
+    const clientInfo = params?.clientInfo && typeof params.clientInfo === "object" && !Array.isArray(params.clientInfo)
+      ? params.clientInfo as Record<string, unknown>
+      : {};
+    const name = clientFamily(clientInfo.name);
+    const version = compatibleVersion(clientInfo.version);
+    const protocol = protocolFamily(params?.protocolVersion);
+    increment(metrics.clients, `${name}\u0000${version}\u0000${protocol}`);
+  }
 }
 
 function prometheusMetrics(metrics: HttpMetrics): string {
@@ -92,9 +187,59 @@ function prometheusMetrics(metrics: HttpMetrics): string {
     "# HELP bugfender_mcp_http_request_duration_seconds_count Number of timed HTTP requests.",
     "# TYPE bugfender_mcp_http_request_duration_seconds_count counter",
     `bugfender_mcp_http_request_duration_seconds_count ${[...metrics.requests.values()].reduce((sum, value) => sum + value, 0)}`,
+    "# HELP bugfender_mcp_tool_invocations_total MCP tool calls by tool name. Tool arguments are never labels or log fields.",
+    "# TYPE bugfender_mcp_tool_invocations_total counter",
+  );
+  for (const [tool, value] of [...metrics.toolInvocations.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`bugfender_mcp_tool_invocations_total{tool="${escapeLabel(tool)}"} ${value}`);
+  }
+  lines.push(
+    "# HELP bugfender_mcp_api_responses_total Downstream Bugfender API responses by status.",
+    "# TYPE bugfender_mcp_api_responses_total counter",
+  );
+  for (const [status, value] of [...metrics.apiResponses.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`bugfender_mcp_api_responses_total{status="${escapeLabel(status)}"} ${value}`);
+  }
+  lines.push(
+    "# HELP bugfender_mcp_api_request_duration_seconds_sum Total time spent waiting for the Bugfender API.",
+    "# TYPE bugfender_mcp_api_request_duration_seconds_sum counter",
+    `bugfender_mcp_api_request_duration_seconds_sum ${metrics.apiDurationSeconds}`,
+    "# HELP bugfender_mcp_api_request_duration_seconds_count Number of timed Bugfender API requests.",
+    "# TYPE bugfender_mcp_api_request_duration_seconds_count counter",
+    `bugfender_mcp_api_request_duration_seconds_count ${[...metrics.apiResponses.values()].reduce((sum, value) => sum + value, 0)}`,
+    "# HELP bugfender_mcp_auth_failures_total Authentication failures that require authorization or reauthorization.",
+    "# TYPE bugfender_mcp_auth_failures_total counter",
+  );
+  for (const [key, value] of [...metrics.authFailures.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const [stage, reason] = key.split("\u0000");
+    lines.push(`bugfender_mcp_auth_failures_total{stage="${escapeLabel(stage)}",reason="${escapeLabel(reason)}"} ${value}`);
+  }
+  lines.push(
+    "# HELP bugfender_mcp_response_truncations_total Responses truncated before returning to a client.",
+    "# TYPE bugfender_mcp_response_truncations_total counter",
+  );
+  for (const [reason, value] of [...metrics.truncations.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`bugfender_mcp_response_truncations_total{reason="${escapeLabel(reason)}"} ${value}`);
+  }
+  lines.push(
+    "# HELP bugfender_mcp_saturation_events_total Requests rejected or terminated by server limits.",
+    "# TYPE bugfender_mcp_saturation_events_total counter",
+  );
+  for (const [reason, value] of [...metrics.saturation.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`bugfender_mcp_saturation_events_total{reason="${escapeLabel(reason)}"} ${value}`);
+  }
+  lines.push(
+    "# HELP bugfender_mcp_client_initializations_total MCP client initialization count by compatible client metadata.",
+    "# TYPE bugfender_mcp_client_initializations_total counter",
+  );
+  for (const [key, value] of [...metrics.clients.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const [name, version, protocol] = key.split("\u0000");
+    lines.push(`bugfender_mcp_client_initializations_total{client="${escapeLabel(name)}",version="${escapeLabel(version)}",protocol="${escapeLabel(protocol)}"} ${value}`);
+  }
+  lines.push(
     "# HELP bugfender_mcp_build_info Build information for the hosted MCP service.",
     "# TYPE bugfender_mcp_build_info gauge",
-    "bugfender_mcp_build_info 1",
+    `bugfender_mcp_build_info{version="${escapeLabel(SERVER_VERSION)}"} 1`,
     "",
   );
   return lines.join("\n");
@@ -384,7 +529,12 @@ function sendMcpError(
   );
 }
 
-export function createHostedRuntimeConfig(token: string, apiUrl: string, resourceUrl: string): RuntimeConfig {
+export function createHostedRuntimeConfig(
+  token: string,
+  apiUrl: string,
+  resourceUrl: string,
+  observability?: RuntimeConfig["observability"],
+): RuntimeConfig {
   return {
     apiToken: token,
     apiUrl,
@@ -393,6 +543,7 @@ export function createHostedRuntimeConfig(token: string, apiUrl: string, resourc
     hostedOAuth: {
       protectedResourceMetadataUrl: protectedResourceMetadataUrlForResource(resourceUrl),
     },
+    observability,
   };
 }
 
@@ -421,7 +572,26 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
   let activeCount = 0;
   let shutdownPromise: Promise<void> | undefined;
   const activeRequests = new Set<ActiveRequest>();
-  const metrics: HttpMetrics = { active: 0, durationSeconds: 0, requests: new Map() };
+  const metrics: HttpMetrics = {
+    active: 0,
+    durationSeconds: 0,
+    requests: new Map(),
+    toolInvocations: new Map(),
+    apiResponses: new Map(),
+    apiDurationSeconds: 0,
+    authFailures: new Map(),
+    truncations: new Map(),
+    saturation: new Map(),
+    clients: new Map(),
+  };
+  const observability: NonNullable<RuntimeConfig["observability"]> = {
+    recordApiResponse: (status, durationMs) => {
+      increment(metrics.apiResponses, String(status));
+      metrics.apiDurationSeconds += durationMs / 1000;
+    },
+    recordAuthFailure: (stage, reason) => increment(metrics.authFailures, `${stage}\u0000${reason}`),
+    recordTruncation: (reason) => increment(metrics.truncations, reason),
+  };
 
   const server = createServer(async (req, res) => {
     const requestId = randomUUID();
@@ -493,6 +663,7 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
       return;
     }
     if (activeCount >= options.maxConcurrency) {
+      increment(metrics.saturation, "concurrency_limit");
       req.resume();
       sendMcpError(res, 503, "Server is busy", { "Retry-After": "1" });
       return;
@@ -513,12 +684,13 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
       const operation = (async () => {
         const token = bearerToken(req);
         const parsedBody = await readJsonBody(req, options.maxRequestBytes);
+        recordMcpMessage(metrics, parsedBody);
         if (timedOut) {
           throw new RequestTimeoutError();
         }
 
         const { server: mcpServer } = createBugfenderServer(
-          createHostedRuntimeConfig(token, options.apiUrl, options.resourceUrl),
+          createHostedRuntimeConfig(token, options.apiUrl, options.resourceUrl, observability),
         );
         const transport = new WebStandardStreamableHTTPServerTransport({
           enableJsonResponse: true,
@@ -548,6 +720,12 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
         const challenge = error.status === 401
           ? bearerChallenge(options, error.message === "Invalid bearer token")
           : undefined;
+        if (error.status === 401) {
+          observability.recordAuthFailure(
+            "bearer",
+            error.message === "Invalid bearer token" ? "invalid_token" : "missing_token",
+          );
+        }
         const headers = challenge
           ? { "WWW-Authenticate": challenge }
           : undefined;
@@ -559,16 +737,18 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
           challenge,
         );
       } else if (error instanceof RequestTimeoutError) {
+        increment(metrics.saturation, "request_timeout");
         if (!req.complete) {
           req.resume();
         }
         sendMcpError(res, 504, "Request timed out");
       } else if (error instanceof ResponseTooLargeError) {
+        increment(metrics.truncations, "http_response_limit");
         sendMcpError(res, 502, "Response body too large");
       } else {
         structuredLog("error", "http_request_failed", {
           request_id: requestId,
-          error: error instanceof Error ? error.message : "unknown error",
+          error_name: error instanceof Error ? error.name : "unknown",
         });
         sendMcpError(res, 500, "Internal server error");
       }

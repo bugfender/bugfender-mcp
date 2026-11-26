@@ -6,6 +6,7 @@ import { paramsToSearch, parseRetryAfter, withJitter } from "./utils/http.js";
 import { tryParseJson } from "./utils/json.js";
 
 export class BugfenderClient {
+  private readonly config: RuntimeConfig;
   private readonly apiUrl: string;
   private readonly configPath: string;
   private readonly persistRuntimeTokens: boolean;
@@ -14,6 +15,7 @@ export class BugfenderClient {
   private seedRefreshToken?: string;
 
   constructor(config: RuntimeConfig) {
+    this.config = config;
     this.apiUrl = config.apiUrl.replace(/\/+$/, "");
     this.configPath = config.configPath;
     this.persistRuntimeTokens = config.persistRuntimeTokens;
@@ -60,27 +62,27 @@ export class BugfenderClient {
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const requestUrl = `${this.apiUrl}${path}`;
+      const startedAt = performance.now();
       let response: Response;
       let text: string;
       try {
         response = await fetch(requestUrl, { ...init, headers: this.buildHeaders(init), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
         text = await response.text();
       } catch (error) {
+        this.config.observability?.recordApiResponse("network_error", performance.now() - startedAt);
         const cause = error instanceof Error && error.cause instanceof Error ? error.cause : null;
         console.error(JSON.stringify({
           timestamp: new Date().toISOString(),
           level: "error",
           event: "bugfender_api_fetch_failed",
           method: init.method,
-          url: requestUrl,
           error_name: error instanceof Error ? error.name : "unknown",
-          error_message: error instanceof Error ? error.message : "unknown",
           cause_name: cause?.name,
-          cause_message: cause?.message,
           cause_code: cause && "code" in cause ? cause.code : undefined,
         }));
         throw error;
       }
+      this.config.observability?.recordApiResponse(response.status, performance.now() - startedAt);
       const body = text ? tryParseJson(text) : null;
 
       if (response.ok) {
@@ -160,7 +162,12 @@ export class BugfenderClient {
       this.persistTokens();
       return true;
     } catch (error) {
-      console.error("Bugfender token refresh failed:", error);
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: "error",
+        event: "bugfender_token_refresh_failed",
+        error_name: error instanceof Error ? error.name : "unknown",
+      }));
       return false;
     }
   }

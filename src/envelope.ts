@@ -96,7 +96,7 @@ export function toolError(error: unknown, hasToken: boolean): Envelope {
   };
 }
 
-export function serializeEnvelope(envelope: Envelope): Envelope {
+export function serializeEnvelope(envelope: Envelope, context?: ServerContext): Envelope {
   const sanitized = omitCredentials(envelope) as Envelope;
   const json = JSON.stringify(sanitized);
   if (Buffer.byteLength(json, "utf8") <= MAX_TOOL_RESULT_BYTES) {
@@ -104,6 +104,7 @@ export function serializeEnvelope(envelope: Envelope): Envelope {
   }
 
   if (!sanitized.ok) {
+    context?.config.observability?.recordTruncation("tool_result");
     return {
       ok: false,
       error: {
@@ -114,6 +115,7 @@ export function serializeEnvelope(envelope: Envelope): Envelope {
     };
   }
 
+  context?.config.observability?.recordTruncation("tool_result");
   return {
     ok: true,
     data: { truncated: true },
@@ -134,13 +136,17 @@ export async function handleTool(
   requiredScopes: readonly string[] = [MCP_READ_SCOPE],
 ): Promise<EnvelopeToolResult> {
   try {
-    return asToolResult(await fn());
+    return asToolResult(await fn(), context);
   } catch (error) {
     if (
       context.config?.hostedOAuth
       && error instanceof BugfenderApiError
       && (error.status === 401 || error.status === 403)
     ) {
+      context.config.observability?.recordAuthFailure(
+        "tool",
+        error.status === 401 ? "invalid_token" : "insufficient_scope",
+      );
       const challenge = oauthChallenge(
         context.config.hostedOAuth.protectedResourceMetadataUrl,
         requiredScopes,
@@ -154,17 +160,17 @@ export async function handleTool(
         },
       };
       return {
-        ...asToolResult(envelope),
+        ...asToolResult(envelope, context),
         isError: true,
         _meta: { "mcp/www_authenticate": challenge },
       };
     }
-    return asToolResult(toolError(error, context.client.hasToken));
+    return asToolResult(toolError(error, context.client.hasToken), context);
   }
 }
 
-export function asToolResult(envelope: Envelope): EnvelopeToolResult {
-  const serialized = serializeEnvelope(envelope);
+export function asToolResult(envelope: Envelope, context?: ServerContext): EnvelopeToolResult {
+  const serialized = serializeEnvelope(envelope, context);
   return {
     content: [{ type: "text" as const, text: JSON.stringify(serialized, null, 2) }],
     structuredContent: serialized,
