@@ -60,7 +60,9 @@ describe("hosted HTTP server", () => {
 
     const metrics = await fetch(`${baseUrl}/metrics`);
     expect(metrics.status).toBe(200);
-    expect(await metrics.text()).toContain("bugfender_mcp_http_requests_total");
+    const body = await metrics.text();
+    expect(body).toContain("bugfender_mcp_http_requests_total");
+    expect(body).not.toContain("bugfender_mcp_refresh_total");
   });
 
   it("serves the configured OpenAI domain-verification token as exact plain text", async () => {

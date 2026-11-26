@@ -43,7 +43,6 @@ export type RuntimeConfig = {
   observability?: {
     recordApiResponse: (status: number | "network_error", durationMs: number) => void;
     recordAuthFailure: (stage: "bearer" | "tool", reason: string) => void;
-    recordRefresh: (outcome: "success" | "failure") => void;
     recordTruncation: (reason: "tool_result") => void;
   };
 };

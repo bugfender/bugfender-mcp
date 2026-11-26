@@ -63,7 +63,6 @@ type HttpMetrics = {
   apiResponses: Map<string, number>;
   apiDurationSeconds: number;
   authFailures: Map<string, number>;
-  refreshes: Map<string, number>;
   truncations: Map<string, number>;
   saturation: Map<string, number>;
   clients: Map<string, number>;
@@ -181,13 +180,6 @@ function prometheusMetrics(metrics: HttpMetrics): string {
   for (const [key, value] of [...metrics.authFailures.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const [stage, reason] = key.split("\u0000");
     lines.push(`bugfender_mcp_auth_failures_total{stage="${escapeLabel(stage)}",reason="${escapeLabel(reason)}"} ${value}`);
-  }
-  lines.push(
-    "# HELP bugfender_mcp_refresh_total Local stdio token refresh outcomes.",
-    "# TYPE bugfender_mcp_refresh_total counter",
-  );
-  for (const [outcome, value] of [...metrics.refreshes.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    lines.push(`bugfender_mcp_refresh_total{outcome="${escapeLabel(outcome)}"} ${value}`);
   }
   lines.push(
     "# HELP bugfender_mcp_response_truncations_total Responses truncated before returning to a client.",
@@ -555,7 +547,6 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
     apiResponses: new Map(),
     apiDurationSeconds: 0,
     authFailures: new Map(),
-    refreshes: new Map(),
     truncations: new Map(),
     saturation: new Map(),
     clients: new Map(),
@@ -566,7 +557,6 @@ export function createHostedHttpServer(options: HostedHttpOptions): HostedHttpSe
       metrics.apiDurationSeconds += durationMs / 1000;
     },
     recordAuthFailure: (stage, reason) => increment(metrics.authFailures, `${stage}\u0000${reason}`),
-    recordRefresh: (outcome) => increment(metrics.refreshes, outcome),
     recordTruncation: (reason) => increment(metrics.truncations, reason),
   };
 

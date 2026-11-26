@@ -147,14 +147,12 @@ export class BugfenderClient {
       const text = await response.text();
       const body = text ? tryParseJson(text) : null;
       if (!response.ok || !body || typeof body !== "object") {
-        this.config.observability?.recordRefresh("failure");
         return false;
       }
 
       const nextApiToken = "api_token" in body && typeof body.api_token === "string" ? body.api_token : null;
       const nextRefreshToken = "refresh_token" in body && typeof body.refresh_token === "string" ? body.refresh_token : null;
       if (!nextApiToken) {
-        this.config.observability?.recordRefresh("failure");
         return false;
       }
 
@@ -163,10 +161,8 @@ export class BugfenderClient {
         this.refreshToken = nextRefreshToken;
       }
       this.persistTokens();
-      this.config.observability?.recordRefresh("success");
       return true;
     } catch (error) {
-      this.config.observability?.recordRefresh("failure");
       console.error(JSON.stringify({
         timestamp: new Date().toISOString(),
         level: "error",
