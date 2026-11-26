@@ -371,7 +371,7 @@ describe("hosted HTTP server", () => {
         params: {
           capabilities: {},
           clientInfo: { name: "test", version: "1.0.0" },
-          protocolVersion: "2025-06-18",
+          protocolVersion: "2025-11-25",
         },
       }),
     });
@@ -379,7 +379,7 @@ describe("hosted HTTP server", () => {
     expect(response.status).toBe(502);
     const metrics = await fetch(`${baseUrl}/metrics`).then((result) => result.text());
     expect(metrics).toContain('bugfender_mcp_response_truncations_total{reason="http_response_limit"} 1');
-    expect(metrics).toContain('bugfender_mcp_client_initializations_total{client="other",version="1.0",protocol="2025-06-18"} 1');
+    expect(metrics).toContain('bugfender_mcp_client_initializations_total{client="other",version="1.0",protocol="2025-11-25"} 1');
   });
 
   it("enforces the concurrency limit", async () => {
@@ -433,7 +433,7 @@ describe("hosted HTTP server", () => {
       });
     });
     const baseUrl = await start();
-    const callWhoAmI = async (id: number, token: string) => {
+    const callTool = async (id: number, token: string, name = "who_am_i") => {
       const response = await fetch(`${baseUrl}/mcp`, {
         method: "POST",
         headers: {
@@ -445,7 +445,7 @@ describe("hosted HTTP server", () => {
           jsonrpc: "2.0",
           id,
           method: "tools/call",
-          params: { name: "who_am_i", arguments: {} },
+          params: { name, arguments: {} },
         }),
       });
       return response.json() as Promise<{
@@ -454,8 +454,8 @@ describe("hosted HTTP server", () => {
     };
 
     const [first, second] = await Promise.all([
-      callWhoAmI(1, "first-user-token"),
-      callWhoAmI(2, "second-user-token"),
+      callTool(1, "first-user-token"),
+      callTool(2, "second-user-token"),
     ]);
 
     expect(first.result?.structuredContent).toEqual({
@@ -466,7 +466,9 @@ describe("hosted HTTP server", () => {
       ok: true,
       data: { public_id: "second", name: "second user", teams: [] },
     });
+    await callTool(3, "first-user-token", "unregistered_tool");
     const metrics = await fetch(`${baseUrl}/metrics`).then((result) => result.text());
+    expect(metrics).not.toContain('tool="unregistered_tool"');
     expect(metrics).toContain('bugfender_mcp_tool_invocations_total{tool="who_am_i"} 2');
     expect(metrics).toContain('bugfender_mcp_api_responses_total{status="200"} 2');
   });

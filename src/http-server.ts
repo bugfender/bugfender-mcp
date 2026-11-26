@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 import { MAX_HTTP_RESPONSE_BYTES, SERVER_VERSION } from "./constants.js";
 import { createBugfenderServer } from "./server.js";
 import { MCP_READ_SCOPE, oauthChallenge } from "./oauth.js";
@@ -21,6 +22,35 @@ const DEFAULT_RESOURCE_TERMS_URL = "https://bugfender.com/terms-of-service/";
 const PROTECTED_RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const MCP_SCOPES = ["mcp:read", "mcp:issues:write"] as const;
+
+// Keep this allowlist in sync with the tools registered in src/tools.
+const METRIC_TOOL_NAMES = new Set([
+  "count_devices",
+  "count_devices_with_logs",
+  "count_logs",
+  "get_app",
+  "get_app_summary",
+  "get_crash_details",
+  "get_crash_device_stats",
+  "get_crash_stats",
+  "get_crashes",
+  "get_feedback",
+  "get_issue",
+  "get_issue_device_stats",
+  "get_issue_devices",
+  "get_issue_stats",
+  "get_network_aggregates",
+  "get_network_details",
+  "get_sdk_snippet",
+  "list_app_versions",
+  "list_apps",
+  "list_issues",
+  "list_teams",
+  "search_devices",
+  "search_logs",
+  "update_issue_status",
+  "who_am_i",
+]);
 
 export type HostedHttpOptions = {
   apiUrl: string;
@@ -101,13 +131,13 @@ function clientFamily(value: unknown): string {
 
 function compatibleVersion(value: unknown): string {
   if (typeof value !== "string") return "unknown";
-  const match = /^(\d+)\.(\d+)/u.exec(value);
+  const match = /^(\d)\.(0|[1-9]\d?)(?=\.|[-+]|$)/u.exec(value);
   return match ? `${match[1]}.${match[2]}` : "unknown";
 }
 
 function protocolFamily(value: unknown): string {
-  return ["2024-11-05", "2025-03-26", "2025-06-18"].includes(String(value))
-    ? String(value)
+  return typeof value === "string" && SUPPORTED_PROTOCOL_VERSIONS.includes(value)
+    ? value
     : "other";
 }
 
@@ -120,7 +150,10 @@ function recordMcpMessage(metrics: HttpMetrics, body: unknown): void {
     ? message.params as Record<string, unknown>
     : undefined;
   if (message.method === "tools/call") {
-    increment(metrics.toolInvocations, boundedLabel(params?.name, "unknown", /^[a-z][a-z0-9_]*$/u));
+    const name = params?.name;
+    if (typeof name === "string" && METRIC_TOOL_NAMES.has(name)) {
+      increment(metrics.toolInvocations, name);
+    }
   }
   if (message.method === "initialize") {
     const clientInfo = params?.clientInfo && typeof params.clientInfo === "object" && !Array.isArray(params.clientInfo)

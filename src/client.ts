@@ -76,7 +76,6 @@ export class BugfenderClient {
           level: "error",
           event: "bugfender_api_fetch_failed",
           method: init.method,
-          path: new URL(requestUrl).pathname,
           error_name: error instanceof Error ? error.name : "unknown",
           cause_name: cause?.name,
           cause_code: cause && "code" in cause ? cause.code : undefined,

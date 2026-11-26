@@ -210,15 +210,17 @@ describe("BugfenderClient", () => {
     });
   });
 
-  it("does not log query values, tokens, or raw network error messages", async () => {
+  it("does not log request paths, query values, tokens, or raw network error messages", async () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     fetchSpy.mockRejectedValueOnce(new Error("failed for token=secret and customer-log-payload"));
     const client = makeClient();
 
-    await expect(client.get("/logs", { query: "customer-log-payload" })).rejects.toThrow();
+    await expect(client.get("/app/private-app/issues-aggregation/private-issue", { query: "customer-log-payload" })).rejects.toThrow();
 
     const entry = consoleSpy.mock.calls[0][0] as string;
-    expect(entry).toContain('"path":"/logs"');
+    expect(entry).toContain('"event":"bugfender_api_fetch_failed"');
+    expect(entry).not.toContain("private-app");
+    expect(entry).not.toContain("private-issue");
     expect(entry).not.toContain("secret");
     expect(entry).not.toContain("customer-log-payload");
   });
