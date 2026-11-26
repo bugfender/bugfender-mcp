@@ -212,7 +212,7 @@ The image runs as UID/GID `10001`, writes structured JSON logs to stderr, and
 exposes Prometheus metrics on `GET /metrics` for cluster-internal scraping.
 Metrics cover HTTP volume/latency/status, active requests, tool invocation
 counts by tool name, downstream API status/latency, safe authentication failure
-reasons, refresh outcomes, truncation, saturation, build version, and sanitized
+reasons, truncation, saturation, build version, and sanitized
 client/protocol adoption. Tool arguments, query values, credentials, and
 customer payloads are never metric labels or structured log fields.
 
